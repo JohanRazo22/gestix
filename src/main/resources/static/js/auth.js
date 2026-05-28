@@ -23,7 +23,7 @@ async function handleLogin(e) {
             })
         });
 
-        if (!res.ok) throw new Error('Email o contrasena incorrectos');
+        if (!res.ok) throw new Error(typeof t === 'function' ? t('errors.loginInvalid') : 'Email o contrasena incorrectos');
 
         const data = await res.json();
         localStorage.setItem('token', data.token);
@@ -53,7 +53,7 @@ async function handleRegister(e) {
 
         if (!res.ok) {
             const err = await res.json();
-            throw new Error(err.message || 'Error al registrarse');
+            throw new Error(err.message || (typeof t === 'function' ? t('errors.register') : 'Error al registrarse'));
         }
 
         const data = await res.json();
@@ -81,9 +81,9 @@ async function handleForgotPassword(e) {
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'No se pudo enviar el enlace');
+        if (!res.ok) throw new Error(data.message || (typeof t === 'function' ? t('errors.forgotSend') : 'No se pudo enviar el enlace'));
 
-        successEl.textContent = data.message || 'Revisa tu correo para continuar.';
+        successEl.textContent = data.message || (typeof t === 'function' ? t('errors.forgotSuccess') : 'Revisa tu correo para continuar.');
         successEl.classList.remove('hidden');
         if (data.devHint) {
             successEl.className = 'bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3.5 py-2.5 text-sm break-all';
@@ -105,7 +105,7 @@ async function handleResetPassword(e) {
     const password = document.getElementById('resetPassword').value;
     const confirm = document.getElementById('resetPasswordConfirm').value;
     if (password !== confirm) {
-        errorEl.textContent = 'Las contraseñas no coinciden';
+        errorEl.textContent = typeof t === 'function' ? t('errors.passwordMismatch') : 'Las contraseñas no coinciden';
         errorEl.classList.remove('hidden');
         return;
     }
@@ -113,7 +113,7 @@ async function handleResetPassword(e) {
     const params = new URLSearchParams(window.location.search);
     const token = (params.get('token') || '').trim();
     if (!token) {
-        errorEl.textContent = 'Enlace invalido. Solicita uno nuevo desde el login.';
+        errorEl.textContent = typeof t === 'function' ? t('errors.resetInvalidLink') : 'Enlace invalido. Solicita uno nuevo desde el login.';
         errorEl.classList.remove('hidden');
         return;
     }
@@ -126,9 +126,9 @@ async function handleResetPassword(e) {
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Enlace invalido o expirado. Solicita uno nuevo.');
+        if (!res.ok) throw new Error(data.message || (typeof t === 'function' ? t('errors.resetInvalidExpired') : 'Enlace invalido o expirado. Solicita uno nuevo.'));
 
-        successEl.textContent = data.message || 'Contraseña actualizada.';
+        successEl.textContent = data.message || (typeof t === 'function' ? t('errors.resetSuccess') : 'Contraseña actualizada.');
         successEl.classList.remove('hidden');
         document.getElementById('resetForm').classList.add('hidden');
     } catch (err) {
@@ -140,4 +140,3 @@ async function handleResetPassword(e) {
 if (localStorage.getItem('token') && !window.location.pathname.endsWith('reset-password.html')) {
     window.location.href = 'dashboard.html';
 }
-

@@ -11,9 +11,6 @@ if (!token || token === 'null' || token === 'undefined') {
 
 document.getElementById('navUsername').textContent = username || '';
 
-const statusLabel = { PENDING: 'Pendiente', IN_PROGRESS: 'En progreso', COMPLETED: 'Completada' };
-const priorityLabel = { HIGH: 'Alta', MEDIUM: 'Media', LOW: 'Baja' };
-
 function authHeaders() {
     return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 }
@@ -54,18 +51,12 @@ async function loadProjects() {
 }
 
 async function loadTasks() {
-    const filterStatus   = window._activeStatus   || '';
-    const filterPriority = window._activePriority || '';
-    const searchTerm     = window._searchTerm     || '';
-    const filterCategory = window._activeCategory || '';
-    const filterOverdue  = window._activeOverdue  || false;
-
     let res;
     try {
         res = await fetch(`${API}/tasks`, { headers: authHeaders() });
     } catch (networkErr) {
         console.error('Error de red:', networkErr);
-        showError('No se pudo conectar al servidor. Verifica que esté en ejecución.');
+        showError(t('errors.network'));
         return;
     }
 
@@ -84,26 +75,41 @@ async function loadTasks() {
     }
 
     window._allTasks = allTasks;
+    renderTaskListFromCache(allTasks);
+    if (typeof refreshLocaleUI === 'function' && window._i18nBootstrapDone) {
+        refreshLocaleUI();
+    }
+}
+
+function renderTaskListFromCache(allTasks) {
     if (window._onTasksLoaded) {
         try { window._onTasksLoaded(allTasks); } catch(e) { console.error('_onTasksLoaded error:', e); }
     }
 
+    const filterStatus   = window._activeStatus   || '';
+    const filterPriority = window._activePriority || '';
+    const searchTerm     = window._searchTerm     || '';
+    const filterCategory = window._activeCategory || '';
+    const filterOverdue  = window._activeOverdue  || false;
+
     let tasks = [...allTasks];
-    if (filterCategory) tasks = tasks.filter(t =>
-        filterCategory === 'Sin proyecto' ? !t.category : t.category === filterCategory
-    );
-    if (filterStatus)   tasks = tasks.filter(t => t.status   === filterStatus);
-    if (filterPriority) tasks = tasks.filter(t => t.priority === filterPriority);
-    if (filterOverdue) {
-        const today = new Date(); today.setHours(0,0,0,0);
-        tasks = tasks.filter(t =>
-            t.dueDate && t.status !== 'COMPLETED' &&
-            new Date(t.dueDate + 'T00:00:00') < today
+    if (filterCategory) {
+        tasks = tasks.filter(task =>
+            isNoProjectName(filterCategory) ? !task.category : task.category === filterCategory
         );
     }
-    if (searchTerm)     tasks = tasks.filter(t =>
-        t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    if (filterStatus)   tasks = tasks.filter(task => task.status   === filterStatus);
+    if (filterPriority) tasks = tasks.filter(task => task.priority === filterPriority);
+    if (filterOverdue) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        tasks = tasks.filter(task =>
+            task.dueDate && task.status !== 'COMPLETED' &&
+            new Date(task.dueDate + 'T00:00:00') < today
+        );
+    }
+    if (searchTerm)     tasks = tasks.filter(task =>
+        task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     const list  = document.getElementById('taskList');
@@ -115,41 +121,39 @@ async function loadTasks() {
         const titleEl   = document.getElementById('emptyTitle');
         const subEl     = document.getElementById('emptySubtitle');
         const actionEl  = document.getElementById('emptyAction');
-        const statusLabels = { PENDING: 'pendientes', IN_PROGRESS: 'en progreso', COMPLETED: 'completadas' };
-        const priorityLabels = { HIGH: 'alta', MEDIUM: 'media', LOW: 'baja' };
         if (iconEl && titleEl && subEl && actionEl) {
             if (searchTerm) {
                 iconEl.textContent   = '🔍';
-                titleEl.textContent  = 'Sin resultados';
-                subEl.textContent    = `No se encontraron tareas para "${searchTerm}"`;
+                titleEl.textContent  = t('tasks.empty.noResults');
+                subEl.textContent    = t('tasks.empty.noResultsFor', { q: searchTerm });
                 actionEl.classList.add('hidden');
             } else if (filterOverdue) {
                 iconEl.textContent   = '🎉';
-                titleEl.textContent  = 'Ninguna tarea vencida';
-                subEl.textContent    = 'Vas al día con todas tus fechas límite';
+                titleEl.textContent  = t('tasks.empty.noOverdue');
+                subEl.textContent    = t('tasks.empty.noOverdueSub');
                 actionEl.classList.add('hidden');
             } else if (filterStatus) {
-                const lbl = statusLabels[filterStatus] || filterStatus;
+                const lbl = tStatus(filterStatus, true);
                 iconEl.textContent   = filterStatus === 'COMPLETED' ? '✅' : filterStatus === 'IN_PROGRESS' ? '⏳' : '📌';
-                titleEl.textContent  = `No hay tareas ${lbl}`;
-                subEl.textContent    = 'Cambia el filtro o crea una nueva tarea';
+                titleEl.textContent  = t('tasks.empty.noStatus', { status: lbl });
+                subEl.textContent    = t('tasks.empty.changeFilter');
                 actionEl.classList.add('hidden');
             } else if (filterPriority) {
-                const lbl = priorityLabels[filterPriority] || filterPriority;
+                const lbl = tPriority(filterPriority, true);
                 iconEl.textContent   = '🎯';
-                titleEl.textContent  = `No hay tareas de prioridad ${lbl}`;
-                subEl.textContent    = 'Prueba con otro filtro de prioridad';
+                titleEl.textContent  = t('tasks.empty.noPriority', { priority: lbl });
+                subEl.textContent    = t('tasks.empty.tryOtherPriority');
                 actionEl.classList.add('hidden');
             } else if (filterCategory) {
-                const name = filterCategory === 'Sin proyecto' ? 'Sin proyecto' : `"${filterCategory}"`;
+                const name = isNoProjectName(filterCategory) ? noProjectLabel() : `"${filterCategory}"`;
                 iconEl.textContent   = '📁';
-                titleEl.textContent  = `No hay tareas en ${name}`;
-                subEl.textContent    = 'Crea una tarea y asígnale este proyecto';
+                titleEl.textContent  = t('tasks.empty.noInProject', { name });
+                subEl.textContent    = t('tasks.empty.assignProject');
                 actionEl.classList.remove('hidden');
             } else {
                 iconEl.textContent   = '📋';
-                titleEl.textContent  = 'No hay tareas aquí';
-                subEl.textContent    = 'Crea tu primera tarea para empezar';
+                titleEl.textContent  = t('tasks.empty.title');
+                subEl.textContent    = t('tasks.empty.subtitle');
                 actionEl.classList.remove('hidden');
             }
         }
@@ -158,22 +162,28 @@ async function loadTasks() {
     }
 
     empty.classList.add('hidden');
-    const render = window._renderTask || (t => `<div class="p-3">${t.title}</div>`);
+    const render = window._renderTask || (task => `<div class="p-3">${task.title}</div>`);
     list.innerHTML = tasks.map(render).join('');
     const countEl = document.getElementById('taskCount');
-    if (countEl) countEl.textContent = `${tasks.length} tarea${tasks.length !== 1 ? 's' : ''}`;
+    if (countEl) countEl.textContent = formatTaskCount(tasks.length);
 }
+
+function reRenderTasksUI() {
+    if (!window._allTasks) return;
+    renderTaskListFromCache(window._allTasks);
+}
+window.reRenderTasksUI = reRenderTasksUI;
 
 function showError(msg) {
     const empty = document.getElementById('emptyState');
     if (empty) {
         empty.innerHTML = `
             <div class="text-4xl mb-4">⚠️</div>
-            <p class="font-bold text-red-500 text-lg mb-2">Error al cargar tareas</p>
+            <p class="font-bold text-red-500 text-lg mb-2">${t('errors.loadTasks')}</p>
             <p class="text-gray-400 mb-6">${msg}</p>
             <button onclick="window.location.href='login.html'"
                 class="font-bold px-6 py-3 rounded-xl text-white text-sm bg-indigo-600">
-                Volver a iniciar sesión
+                ${t('errors.backToLogin')}
             </button>`;
         empty.classList.remove('hidden');
     }
@@ -182,7 +192,7 @@ function showError(msg) {
 async function toggleTaskComplete(id, event) {
     if (event) event.stopPropagation();
 
-    const task = (window._allTasks || []).find(t => t.id === id);
+    const task = (window._allTasks || []).find(item => item.id === id);
     if (!task) return;
 
     const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
@@ -205,31 +215,32 @@ async function toggleTaskComplete(id, event) {
             logout();
             return;
         }
-        if (!res.ok) throw new Error('No se pudo actualizar la tarea');
+        if (!res.ok) throw new Error(t('errors.updateTask'));
 
         await loadTasks();
         if (typeof window._renderProjectDetail === 'function' && window._currentProject) {
             window._renderProjectDetail();
         }
     } catch (err) {
-        alert(err.message || 'Error al actualizar la tarea');
+        alert(err.message || t('errors.updateTask'));
     }
 }
 window.toggleTaskComplete = toggleTaskComplete;
 
 function openModal() {
-    document.getElementById('modalTitle').textContent = 'Nueva Tarea';
+    document.getElementById('modalTitle').textContent = t('modal.task.new');
     document.getElementById('taskForm').reset();
     document.getElementById('taskId').value = '';
     document.getElementById('taskError').classList.add('hidden');
     document.getElementById('taskModal').classList.remove('hidden');
+    if (typeof refreshTaskFormSelects === 'function') refreshTaskFormSelects();
 }
 
 async function openEditModal(id) {
     const res = await fetch(`${API}/tasks/${id}`, { headers: authHeaders() });
     const task = await res.json();
 
-    document.getElementById('modalTitle').textContent = 'Editar Tarea';
+    document.getElementById('modalTitle').textContent = t('modal.task.edit');
     document.getElementById('taskId').value = task.id;
     document.getElementById('taskTitle').value = task.title;
     document.getElementById('taskDescription').value = task.description || '';
@@ -239,6 +250,7 @@ async function openEditModal(id) {
     document.getElementById('taskDueDate').value = task.dueDate || '';
     document.getElementById('taskError').classList.add('hidden');
     document.getElementById('taskModal').classList.remove('hidden');
+    if (typeof refreshTaskFormSelects === 'function') refreshTaskFormSelects();
 }
 
 function closeModal() {
@@ -267,7 +279,7 @@ async function handleSaveTask(e) {
             body: JSON.stringify(body)
         });
 
-        if (!res.ok) throw new Error('Error al guardar la tarea');
+        if (!res.ok) throw new Error(t('errors.saveTask'));
 
         closeModal();
         loadTasks();
@@ -296,10 +308,10 @@ async function confirmDelete() {
 
 function tasksInProject(name) {
     const all = window._allTasks || [];
-    if (name === 'Sin proyecto') {
-        return all.filter(t => !t.category || !String(t.category).trim());
+    if (isNoProjectName(name)) {
+        return all.filter(task => !task.category || !String(task.category).trim());
     }
-    return all.filter(t => t.category === name);
+    return all.filter(task => task.category === name);
 }
 
 function openDeleteProjectModal(name, id = null) {
@@ -307,16 +319,17 @@ function openDeleteProjectModal(name, id = null) {
     const count = tasksInProject(name).length;
     const titleEl = document.getElementById('deleteProjectTitle');
     const msgEl   = document.getElementById('deleteProjectMessage');
+    const displayName = isNoProjectName(name) ? noProjectLabel() : name;
 
-    if (titleEl) titleEl.textContent = `¿Eliminar "${name}"?`;
+    if (titleEl) titleEl.textContent = t('modal.delete.projectConfirm', { name: displayName });
 
     if (msgEl) {
         if (count === 0) {
-            msgEl.textContent = 'Este proyecto no tiene tareas. Se eliminará de tu lista de proyectos.';
+            msgEl.textContent = t('modal.delete.projectEmpty');
         } else if (count === 1) {
-            msgEl.textContent = 'Si eliminas este proyecto, se borrará permanentemente 1 tarea que contiene.';
+            msgEl.textContent = t('modal.delete.projectOne');
         } else {
-            msgEl.textContent = `Si eliminas este proyecto, se borrarán permanentemente las ${count} tareas que contiene.`;
+            msgEl.textContent = t('modal.delete.projectMany', { n: count });
         }
     }
 
@@ -329,7 +342,7 @@ function closeDeleteProjectModal() {
     const btn = document.getElementById('deleteProjectConfirmBtn');
     if (btn) {
         btn.disabled = false;
-        btn.textContent = 'Eliminar proyecto';
+        btn.textContent = t('modal.delete.projectBtn');
     }
     document.getElementById('deleteProjectModal').classList.add('hidden');
 }
@@ -343,7 +356,7 @@ async function confirmDeleteProject() {
 
     if (btn) {
         btn.disabled = true;
-        btn.textContent = 'Eliminando...';
+        btn.textContent = t('modal.delete.deleting');
     }
 
     try {
@@ -356,7 +369,7 @@ async function confirmDeleteProject() {
                 logout();
                 return;
             }
-            if (!res.ok) throw new Error('No se pudo eliminar el proyecto');
+            if (!res.ok) throw new Error(t('errors.deleteProject'));
         } else {
             for (const task of tasks) {
                 const res = await fetch(`${API}/tasks/${task.id}`, {
@@ -367,7 +380,7 @@ async function confirmDeleteProject() {
                     logout();
                     return;
                 }
-                if (!res.ok) throw new Error('No se pudo eliminar una tarea del proyecto');
+                if (!res.ok) throw new Error(t('errors.deleteProjectTask'));
             }
         }
 
@@ -378,10 +391,10 @@ async function confirmDeleteProject() {
         await loadTasks();
         if (typeof renderProjects === 'function') renderProjects();
     } catch (err) {
-        alert(err.message || 'Error al eliminar el proyecto');
+        alert(err.message || t('errors.deleteProject'));
         if (btn) {
             btn.disabled = false;
-            btn.textContent = 'Eliminar proyecto';
+            btn.textContent = t('modal.delete.projectBtn');
         }
     }
 }
