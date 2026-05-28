@@ -1,0 +1,2580 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestix — Dashboard</title>
+    <script>
+        (function () {
+            let theme = localStorage.getItem('gestix_theme');
+            if (!theme && localStorage.getItem('gestix_dark_mode') === '1') theme = 'dark';
+            if (!theme) theme = 'light';
+            const dark = theme === 'dark'
+                || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            if (dark) document.documentElement.classList.add('dark');
+        })();
+    </script>
+    <script>
+        tailwind.config = { darkMode: 'class' };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="js/i18n.js?v=2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        html { font-size: 16px; }
+        * { font-family: 'Inter', sans-serif; }
+
+        /* ── Sidebar colapsable ── */
+        .sidebar {
+            width: 224px;
+            flex-shrink: 0;
+            overflow: hidden;
+            transition: width .28s cubic-bezier(.4,0,.2,1),
+                        border-right-color .28s ease;
+        }
+        .sidebar.collapsed {
+            width: 0;
+            border-right-color: transparent;
+        }
+        /* Wrapper interno con ancho fijo: evita que el contenido se reflow
+           mientras el <aside> está animando su width. */
+        .sidebar__inner {
+            width: 224px;
+            min-width: 224px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        /* El botón hamburguesa rota suavemente cuando la sidebar está cerrada */
+        #sidebarToggle svg { transition: transform .28s ease; }
+        body.sidebar-collapsed #sidebarToggle svg { transform: rotate(90deg); }
+
+        /* ── Sidebar ── */
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 11px 14px; border-radius: 12px;
+            color: #6b7280; font-weight: 600; font-size: 1rem;
+            cursor: pointer; transition: all .18s ease;
+        }
+        .nav-item:hover   { background: #f5f3ff; color: #6366f1; }
+        .nav-item.active  { background: #ede9fe; color: #6366f1; }
+        .nav-icon { width:20px; height:20px; flex-shrink:0; opacity:.7; }
+        .nav-item.active .nav-icon,
+        .nav-item:hover  .nav-icon { opacity:1; }
+
+        /* ── Stats cards ── */
+        .stat-card {
+            cursor: pointer;
+            user-select: none;
+            transition: transform .25s ease, box-shadow .25s ease, border-color .2s ease;
+        }
+        .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,.08); }
+        .stat-card:focus-visible { outline: none; border-color: #c7d2fe; box-shadow: 0 0 0 3px rgba(99,102,241,.20); }
+        .stat-card.active-card {
+            border-color: #6366f1 !important;
+            box-shadow: 0 0 0 3px rgba(99,102,241,.15), 0 10px 25px rgba(99,102,241,.18) !important;
+        }
+
+        /* ── Task rows ── */
+        .task-row { transition: background .15s ease; cursor: pointer; }
+        .task-row:hover { background: #fafafa; }
+        .task-row:hover .row-actions { opacity: 1; }
+        .row-actions { opacity: 0; transition: opacity .15s ease; }
+
+        /* ── Modal detalle de tarea ── */
+        .detail-label {
+            display: block;
+            font-size: .7rem;
+            font-weight: 700;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: .4rem;
+        }
+        .detail-value {
+            font-size: .95rem;
+            font-weight: 600;
+            color: #111827;
+            line-height: 1.5;
+        }
+        .detail-value-muted { color: #6b7280; font-weight: 500; }
+        .detail-box {
+            background: #f9fafb;
+            border: 1.5px solid #f3f4f6;
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+        .checkbox-circle {
+            width:20px; height:20px; border-radius:50%; border:2px solid #d1d5db;
+            flex-shrink:0; cursor:pointer; transition:all .15s ease;
+            display:flex; align-items:center; justify-content:center;
+            font-size:.65rem; font-weight:900; color:transparent;
+        }
+        .checkbox-circle.done {
+            background:linear-gradient(135deg,#6366f1,#8b5cf6);
+            border-color:#6366f1; color:white;
+        }
+        .task-row:hover .checkbox-circle { border-color:#6366f1; }
+        .task-row:hover .checkbox-circle.done { border-color:#4f46e5; }
+
+        /* ── Modal ── */
+        .modal-wrap  { animation: fadeBg .2s ease; }
+        .modal-panel { animation: popUp .25s cubic-bezier(.34,1.56,.64,1); }
+        @keyframes fadeBg { from{opacity:0} to{opacity:1} }
+        @keyframes popUp  { from{transform:translateY(24px) scale(.97);opacity:0} to{transform:none;opacity:1} }
+
+        .field {
+            width:100%; padding:12px 16px; border-radius:12px;
+            border:2px solid #e5e7eb; font-size:.95rem; color:#1f2937;
+            background:white; transition:border-color .2s, box-shadow .2s;
+        }
+        .field:focus { outline:none; border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width:5px; height:5px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:#d1d5db; border-radius:99px; }
+
+        /* ── Sidebar pro card ── */
+        .pro-card {
+            background: linear-gradient(135deg, #fef9c3, #fefce8);
+            border: 1px solid #fde68a;
+            border-radius:16px; padding:16px;
+        }
+
+        /* ── Search bar ── */
+        .search-bar {
+            display:flex; align-items:center; gap:8px;
+            background:#f9fafb; border:1.5px solid #e5e7eb;
+            border-radius:12px; padding:8px 14px;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .search-bar:focus-within {
+            border-color:#6366f1; background:white;
+            box-shadow:0 0 0 3px rgba(99,102,241,.10);
+        }
+        .search-bar input { background:transparent; outline:none; font-size:1rem; color:#374151; width:200px; }
+        .search-bar input::placeholder { color:#9ca3af; }
+
+        /* ── Calendar ── */
+        .cal-cell {
+            min-height:90px; border-radius:10px; padding:6px; cursor:pointer;
+            border:1.5px solid transparent; transition:all .15s ease; position:relative;
+        }
+        .cal-cell:hover { background:#f5f3ff; border-color:#c7d2fe; }
+        .cal-cell.selected { background:#ede9fe; border-color:#a5b4fc; }
+        .cal-cell.today .cal-day-num {
+            background:linear-gradient(135deg,#6366f1,#8b5cf6);
+            color:white; border-radius:50%; width:26px; height:26px;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .cal-task-chip {
+            font-size:0.62rem; font-weight:700; padding:2px 5px;
+            border-radius:4px; margin-top:2px; white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis; max-width:100%;
+            display:block; line-height:1.4;
+        }
+        .chip-pending    { background:#fef3c7; color:#92400e; }
+        .chip-progress   { background:#dbeafe; color:#1e40af; }
+        .chip-completed  { background:#d1fae5; color:#065f46; }
+
+        /* ── Dark mode ── */
+        .dark-toggle {
+            width:40px; height:22px; border-radius:99px; background:#e5e7eb;
+            position:relative; cursor:pointer; transition:background .2s;
+        }
+        .dark-toggle.on { background:#6366f1; }
+        .dark-toggle::after {
+            content:''; position:absolute; top:3px; left:3px;
+            width:16px; height:16px; border-radius:50%; background:white;
+            transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.2);
+        }
+        .dark-toggle.on::after { transform:translateX(18px); }
+
+        /* ── Dark mode (tema completo) ── */
+        html.dark {
+            color-scheme: dark;
+            --dm-bg: #0f1117;
+            --dm-surface: #1a1d27;
+            --dm-surface-2: #222633;
+            --dm-muted: #2a2f3d;
+            --dm-border: #2f3545;
+            --dm-border-strong: #3d4459;
+            --dm-text: #f3f4f6;
+            --dm-text-2: #e5e7eb;
+            --dm-text-muted: #9ca3af;
+            --dm-text-faint: #6b7280;
+        }
+
+        html.dark,
+        html.dark body { background-color: var(--dm-bg) !important; color: var(--dm-text-2); }
+
+        html.dark ::-webkit-scrollbar-thumb { background: #4b5563; }
+
+        html.dark .bg-white,
+        html.dark .modal-panel { background-color: var(--dm-surface) !important; }
+        html.dark .bg-gray-50 { background-color: var(--dm-bg) !important; }
+        html.dark .bg-gray-100 { background-color: var(--dm-muted) !important; }
+
+        html.dark .text-gray-900,
+        html.dark .text-gray-800 { color: var(--dm-text) !important; }
+        html.dark .text-gray-700,
+        html.dark .text-gray-600 { color: var(--dm-text-2) !important; }
+        html.dark .text-gray-500,
+        html.dark .text-gray-400 { color: var(--dm-text-muted) !important; }
+        html.dark .text-gray-300 { color: var(--dm-text-faint) !important; }
+
+        html.dark .border-gray-50,
+        html.dark .border-gray-100,
+        html.dark .border-gray-200 { border-color: var(--dm-border) !important; }
+
+        html.dark aside { background-color: var(--dm-surface) !important; border-color: var(--dm-border) !important; box-shadow: 2px 0 16px rgba(0,0,0,.35) !important; }
+        html.dark header { background-color: var(--dm-surface) !important; border-color: var(--dm-border) !important; box-shadow: 0 1px 10px rgba(0,0,0,.3) !important; }
+
+        html.dark .nav-item { color: var(--dm-text-muted); }
+        html.dark .nav-item:hover { background: #252042; color: #a5b4fc; }
+        html.dark .nav-item.active { background: #312e81; color: #c7d2fe; }
+        html.dark .nav-item.text-red-400:hover { background: rgba(239,68,68,.12); color: #f87171; }
+
+        html.dark .stat-card { background-color: var(--dm-surface) !important; border-color: var(--dm-border) !important; box-shadow: 0 2px 12px rgba(0,0,0,.28) !important; }
+        html.dark .stat-card:hover { box-shadow: 0 12px 30px rgba(0,0,0,.4) !important; }
+        html.dark .stat-card.active-card { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.25), 0 10px 25px rgba(99,102,241,.2) !important; }
+
+        html.dark .task-row:hover { background: var(--dm-surface-2) !important; }
+        html.dark .checkbox-circle { border-color: #4b5563; }
+        html.dark .task-row:hover .checkbox-circle { border-color: #818cf8; }
+
+        html.dark .field {
+            background: var(--dm-surface-2) !important;
+            border-color: var(--dm-border-strong) !important;
+            color: var(--dm-text) !important;
+        }
+        html.dark .field:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.2); }
+        html.dark select.field option { background: var(--dm-surface); color: var(--dm-text); }
+
+        html.dark .search-bar {
+            background: var(--dm-surface-2) !important;
+            border-color: var(--dm-border-strong) !important;
+        }
+        html.dark .search-bar:focus-within {
+            background: var(--dm-surface) !important;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+        }
+        html.dark .search-bar input { color: var(--dm-text); }
+        html.dark .search-bar input::placeholder { color: var(--dm-text-faint); }
+
+        html.dark .pill {
+            background: var(--dm-surface) !important;
+            border-color: var(--dm-border-strong) !important;
+            color: var(--dm-text-muted) !important;
+        }
+        html.dark .pill:hover:not(.active) { border-color: #6366f1 !important; color: #a5b4fc !important; background: #1e1b4b !important; }
+        html.dark .pill.active { background: #312e81 !important; border-color: #6366f1 !important; color: #c7d2fe !important; }
+        html.dark .pill-overdue:hover:not(.active) { border-color: #f87171 !important; color: #fca5a5 !important; background: rgba(127,29,29,.35) !important; }
+        html.dark .pill-overdue.active { background: rgba(127,29,29,.45) !important; border-color: #f87171 !important; color: #fca5a5 !important; }
+
+        html.dark .detail-label { color: var(--dm-text-faint); }
+        html.dark .detail-value { color: var(--dm-text); }
+        html.dark .detail-value-muted { color: var(--dm-text-muted); }
+        html.dark .detail-box {
+            background: var(--dm-surface-2) !important;
+            border-color: var(--dm-border) !important;
+        }
+
+        html.dark .pro-card {
+            background: linear-gradient(135deg, #422006, #292524) !important;
+            border-color: #78350f !important;
+        }
+
+        html.dark .cal-cell:hover { background: #252042 !important; border-color: #4338ca !important; }
+        html.dark .cal-cell.selected { background: #312e81 !important; border-color: #6366f1 !important; }
+        html.dark .cal-cell.opacity-30 { opacity: .35 !important; }
+
+        html.dark .hover\:bg-gray-50:hover,
+        html.dark .hover\:bg-gray-100:hover { background-color: var(--dm-muted) !important; }
+        html.dark .hover\:border-gray-200:hover { border-color: var(--dm-border-strong) !important; }
+        html.dark .hover\:bg-indigo-50:hover { background-color: rgba(99,102,241,.15) !important; }
+        html.dark .hover\:bg-red-50:hover { background-color: rgba(239,68,68,.12) !important; }
+        html.dark .hover\:text-indigo-700:hover { color: #a5b4fc !important; }
+
+        html.dark .bg-indigo-100 { background-color: rgba(99,102,241,.2) !important; }
+        html.dark .bg-amber-100 { background-color: rgba(245,158,11,.18) !important; }
+        html.dark .bg-blue-100   { background-color: rgba(59,130,246,.18) !important; }
+        html.dark .bg-green-100  { background-color: rgba(34,197,94,.18) !important; }
+        html.dark .bg-red-100    { background-color: rgba(239,68,68,.18) !important; }
+        html.dark .bg-yellow-50  { background-color: rgba(234,179,8,.12) !important; }
+        html.dark .bg-red-50     { background-color: rgba(239,68,68,.12) !important; }
+        html.dark .bg-green-50   { background-color: rgba(34,197,94,.12) !important; }
+
+        html.dark .border-red-100   { border-color: rgba(239,68,68,.25) !important; }
+        html.dark .border-yellow-200 { border-color: rgba(234,179,8,.25) !important; }
+        html.dark .border-green-200  { border-color: rgba(34,197,94,.25) !important; }
+
+        html.dark .text-yellow-700 { color: #fde047 !important; }
+        html.dark .text-green-700  { color: #86efac !important; }
+        html.dark .text-red-600,
+        html.dark .text-red-700    { color: #fca5a5 !important; }
+
+        html.dark .rounded-2xl.border.border-gray-100[style*="box-shadow"],
+        html.dark .stat-card[style*="box-shadow"] {
+            box-shadow: 0 2px 12px rgba(0,0,0,.28) !important;
+        }
+
+        html.dark #userMenuPanel {
+            background-color: var(--dm-surface) !important;
+            border-color: var(--dm-border) !important;
+            box-shadow: 0 8px 30px rgba(0,0,0,.45) !important;
+        }
+
+        html.dark .modal-wrap { background-color: rgba(0,0,0,.65) !important; }
+
+        html.dark button.border-gray-200 {
+            border-color: var(--dm-border-strong) !important;
+            color: var(--dm-text-muted) !important;
+        }
+        html.dark button.border-gray-200:hover { background: var(--dm-muted) !important; color: var(--dm-text) !important; }
+
+        html.dark .shadow-red-200 { box-shadow: 0 10px 25px rgba(239,68,68,.15) !important; }
+
+        /* ── Botones de opción (tema / idioma) ── */
+        .option-btn {
+            padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: .9rem;
+            border: 2px solid #e5e7eb; background: white; color: #6b7280;
+            cursor: pointer; transition: all .15s ease;
+        }
+        .option-btn:hover:not(.active) { border-color: #c7d2fe; color: #6366f1; }
+        .option-btn.active { border-color: #6366f1; background: #ede9fe; color: #6366f1; }
+        html.dark .option-btn {
+            background: var(--dm-surface-2) !important;
+            border-color: var(--dm-border-strong) !important;
+            color: var(--dm-text-muted) !important;
+        }
+        html.dark .option-btn.active {
+            background: #312e81 !important;
+            border-color: #6366f1 !important;
+            color: #c7d2fe !important;
+        }
+
+        /* ── FAQ acordeón ── */
+        .faq-item { border-bottom: 1px solid #f3f4f6; }
+        .faq-item:last-child { border-bottom: none; }
+        .faq-q {
+            width: 100%; text-align: left; padding: 14px 0; font-weight: 700;
+            font-size: .95rem; color: #374151; background: none; border: none;
+            cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        }
+        .faq-q:hover { color: #6366f1; }
+        .faq-q .faq-chevron { transition: transform .2s; flex-shrink: 0; color: #9ca3af; }
+        .faq-q.open .faq-chevron { transform: rotate(180deg); }
+        .faq-a {
+            display: none; padding: 0 0 14px; font-size: .9rem; color: #6b7280; line-height: 1.6;
+        }
+        .faq-a.open { display: block; }
+        html.dark .faq-item { border-color: var(--dm-border); }
+        html.dark .faq-q { color: var(--dm-text-2); }
+        html.dark .faq-a { color: var(--dm-text-muted); }
+
+        .settings-action-btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 16px; border-radius: 12px; font-weight: 700; font-size: .9rem;
+            border: 2px solid #e5e7eb; background: white; color: #374151;
+            cursor: pointer; transition: all .15s ease;
+        }
+        .settings-action-btn:hover { border-color: #c7d2fe; color: #6366f1; background: #f5f3ff; }
+        html.dark .settings-action-btn {
+            background: var(--dm-surface-2) !important;
+            border-color: var(--dm-border-strong) !important;
+            color: var(--dm-text-2) !important;
+        }
+        html.dark .settings-action-btn:hover { background: #252042 !important; color: #a5b4fc !important; }
+    </style>
+</head>
+<body class="bg-gray-50" style="height:100vh; overflow:hidden">
+
+<!-- ══════════════════ LAYOUT ══════════════════ -->
+<div class="flex h-screen overflow-hidden">
+
+    <!-- ══ SIDEBAR ══ -->
+    <aside id="sidebar" class="sidebar bg-white border-r border-gray-100 h-full" style="box-shadow:2px 0 12px rgba(0,0,0,.04)">
+      <div class="sidebar__inner">
+
+        <!-- Logo -->
+        <div class="flex items-center gap-3 px-5 py-5 border-b border-gray-100">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200"
+                 style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
+                <span class="text-white font-black text-xl leading-none">G</span>
+            </div>
+            <span class="font-black text-xl" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Gestix</span>
+        </div>
+
+        <!-- Nav -->
+        <nav class="px-3 py-4 flex-1">
+            <p class="text-sm font-bold text-gray-400 uppercase tracking-widest px-3 mb-3" data-i18n="nav.menu">Menú</p>
+
+            <div class="nav-item active" id="navMisTareas" onclick="showSection('tasks')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                <span data-i18n="nav.tasks">Mis Tareas</span>
+            </div>
+            <div class="nav-item mt-1" id="navProyectos" onclick="showSection('projects')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                <span data-i18n="nav.projects">Proyectos</span>
+            </div>
+            <div class="nav-item mt-1" id="navCalendario" onclick="showSection('calendar')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                <span data-i18n="nav.calendar">Calendario</span>
+            </div>
+            <div class="nav-item mt-1" id="navReportes" onclick="showSection('reports')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                <span data-i18n="nav.reports">Reportes</span>
+            </div>
+            <div class="nav-item mt-1" id="navSettings" onclick="showSection('settings')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span data-i18n="nav.settings">Configuración</span>
+            </div>
+        </nav>
+
+        <!-- Bottom -->
+        <div class="px-3 pb-4 space-y-3">
+            <!-- Logout -->
+            <div class="nav-item text-red-400 hover:bg-red-50 hover:text-red-500" onclick="logout()">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                <span data-i18n="nav.logout">Cerrar sesión</span>
+            </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ══ MAIN AREA ══ -->
+    <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+
+        <!-- ── TOP HEADER ── -->
+        <header class="bg-white border-b border-gray-100 px-8 py-3.5 flex items-center justify-between flex-shrink-0" style="box-shadow:0 1px 8px rgba(0,0,0,.04)">
+            <div class="flex items-center gap-4">
+                <button id="sidebarToggle" type="button" onclick="toggleSidebar()"
+                        aria-label="Mostrar u ocultar la barra lateral"
+                        class="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+                <h1 id="headerTitle" class="font-black text-2xl text-gray-900" data-i18n="header.tasks">Mis Tareas</h1>
+            </div>
+
+            <!-- User dropdown trigger -->
+            <div class="relative" id="userMenuWrapper">
+                <button id="userMenuBtn" onclick="toggleUserMenu()"
+                    class="flex items-center gap-3 pl-3 pr-1 py-1.5 rounded-2xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200 cursor-pointer">
+                    <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm"
+                         id="headerAvatar" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">J</div>
+                    <span id="navUsername" class="font-bold text-gray-800 text-base"></span>
+                    <svg id="userMenuChevron" class="w-4 h-4 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+
+                <!-- Dropdown panel -->
+                <div id="userMenuPanel"
+                     class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl border border-gray-100 py-2 z-50"
+                     style="box-shadow:0 8px 30px rgba(0,0,0,.12)">
+
+                    <!-- Profile header -->
+                    <div class="flex items-center gap-3 px-5 py-4 border-b border-gray-50">
+                        <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg flex-shrink-0"
+                             id="dropAvatar" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">J</div>
+                        <div class="min-w-0">
+                            <p id="dropName" class="font-black text-gray-900 text-base truncate"></p>
+                            <p id="dropEmail" class="text-sm text-gray-400 truncate"></p>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="px-2 pt-2">
+                        <button onclick="logout()"
+                            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 transition-colors text-sm font-bold">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                            Cerrar sesión
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- ── SCROLLABLE CONTENT ── -->
+        <main class="flex-1 overflow-y-auto px-8 py-7">
+
+        <!-- ══ SECCIÓN: MIS TAREAS ══ -->
+        <div id="sectionTasks">
+
+            <!-- Greeting + Button -->
+            <div class="flex items-start justify-between mb-7">
+                <div>
+                    <h2 class="text-4xl font-black text-gray-900 mb-1">¡Hola, <span id="greetName">Usuario</span>! 👋</h2>
+                    <p class="text-gray-400 text-lg" data-i18n="tasks.subtitle">Aquí tienes el resumen de tus tareas y progreso.</p>
+                </div>
+                <button onclick="openModal()"
+                    class="flex items-center gap-2 text-white font-black px-6 py-3.5 rounded-2xl text-lg transition-all"
+                    style="background:linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow:0 6px 20px rgba(99,102,241,.4)">
+                    <span class="text-xl leading-none">+</span> <span data-i18n="tasks.newTask">Nueva Tarea</span>
+                </button>
+            </div>
+
+            <!-- ── STAT CARDS (clickeables: filtran el listado) ── -->
+            <div class="grid grid-cols-5 gap-4 mb-7">
+
+                <div class="stat-card bg-white rounded-2xl p-5 border border-gray-100"
+                     data-filter="all" role="button" tabindex="0"
+                     onclick="filterByStatCard('all')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();filterByStatCard('all')}"
+                     style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-11 h-11 rounded-xl bg-indigo-100 flex items-center justify-center text-2xl">📋</div>
+                    </div>
+                    <p class="text-4xl font-black text-gray-900 mb-1" id="statTotal">0</p>
+                    <p class="text-base text-gray-500 font-medium mb-2" data-i18n="tasks.stat.total">Total Tareas</p>
+                    <p class="text-sm text-indigo-500 font-semibold" id="statTotalSub">Cargando...</p>
+                </div>
+
+                <div class="stat-card bg-white rounded-2xl p-5 border border-gray-100"
+                     data-filter="pending" role="button" tabindex="0"
+                     onclick="filterByStatCard('pending')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();filterByStatCard('pending')}"
+                     style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center text-2xl">⏰</div>
+                    </div>
+                    <p class="text-4xl font-black text-gray-900 mb-1" id="statPending">0</p>
+                    <p class="text-base text-gray-500 font-medium mb-2" data-i18n="tasks.stat.pending">Pendientes</p>
+                    <p class="text-sm text-amber-500 font-semibold" id="statPendingSub">—</p>
+                </div>
+
+                <div class="stat-card bg-white rounded-2xl p-5 border border-gray-100"
+                     data-filter="progress" role="button" tabindex="0"
+                     onclick="filterByStatCard('progress')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();filterByStatCard('progress')}"
+                     style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center text-2xl">🔄</div>
+                    </div>
+                    <p class="text-4xl font-black text-gray-900 mb-1" id="statInProgress">0</p>
+                    <p class="text-base text-gray-500 font-medium mb-2" data-i18n="tasks.stat.progress">En Progreso</p>
+                    <p class="text-sm text-blue-500 font-semibold" data-i18n="tasks.stat.focus">Enfócate 💪</p>
+                </div>
+
+                <div class="stat-card bg-white rounded-2xl p-5 border border-gray-100"
+                     data-filter="completed" role="button" tabindex="0"
+                     onclick="filterByStatCard('completed')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();filterByStatCard('completed')}"
+                     style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center text-2xl">✅</div>
+                    </div>
+                    <p class="text-4xl font-black text-gray-900 mb-1" id="statCompleted">0</p>
+                    <p class="text-base text-gray-500 font-medium mb-2" data-i18n="tasks.stat.completed">Completadas</p>
+                    <p class="text-sm text-green-500 font-semibold" id="statCompletedSub">—</p>
+                </div>
+
+                <div class="stat-card bg-white rounded-2xl p-5 border border-gray-100"
+                     data-filter="overdue" role="button" tabindex="0"
+                     onclick="filterByStatCard('overdue')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();filterByStatCard('overdue')}"
+                     style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center text-2xl">📅</div>
+                    </div>
+                    <p class="text-4xl font-black text-gray-900 mb-1" id="statOverdue">0</p>
+                    <p class="text-base text-gray-500 font-medium mb-2" data-i18n="tasks.stat.overdue">Vencidas</p>
+                    <p class="text-sm text-red-500 font-semibold" id="statOverdueSub">—</p>
+                </div>
+
+            </div>
+
+            <!-- ── MAIN GRID: tasks + right panel ── -->
+            <div class="grid grid-cols-3 gap-6 mb-6 items-start">
+
+                <!-- Task list (2/3) -->
+                <div class="col-span-2 bg-white rounded-2xl border border-gray-100 self-start" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+                        <h3 class="font-black text-xl text-gray-900" data-i18n="tasks.myTasks">Mis Tareas</h3>
+                        <div class="search-bar">
+                            <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            <input type="text" id="searchInput" data-i18n-placeholder="tasks.search" placeholder="Buscar tareas..." oninput="handleSearch(this.value)">
+                        </div>
+                    </div>
+
+                    <!-- Filter pills -->
+                    <div class="flex gap-2 px-6 pt-4 pb-3 flex-wrap">
+                        <button class="pill active" data-status="" data-priority="" onclick="applyFilter(this)" data-i18n="tasks.filter.all">Todas</button>
+                        <button class="pill" data-status="PENDING"     data-priority="" onclick="applyFilter(this)" data-i18n="tasks.filter.pending">Pendientes</button>
+                        <button class="pill" data-status="IN_PROGRESS" data-priority="" onclick="applyFilter(this)" data-i18n="tasks.filter.progress">En progreso</button>
+                        <button class="pill" data-status="COMPLETED"   data-priority="" onclick="applyFilter(this)" data-i18n="tasks.filter.completed">Completadas</button>
+                        <button class="pill pill-overdue" data-overdue="true" onclick="filterByStatCard('overdue')">
+                            <span class="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 align-middle"></span><span data-i18n="tasks.filter.overdue">Vencidas</span>
+                        </button>
+                    </div>
+                    <style>
+                        .pill { padding:7px 18px; border-radius:9999px; font-size:.95rem; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:white; color:#6b7280; transition:all .15s ease; }
+                        .pill:hover:not(.active) { border-color:#a5b4fc; color:#6366f1; background:#f5f3ff; }
+                        .pill.active { background:#ede9fe; border-color:#a5b4fc; color:#6366f1; }
+                        /* Pill de Vencidas: tonos rojos en hover y cuando está activa */
+                        .pill-overdue:hover:not(.active) { border-color:#fca5a5; color:#dc2626; background:#fef2f2; }
+                        .pill-overdue.active { background:#fee2e2; border-color:#fca5a5; color:#dc2626; }
+                    </style>
+
+                    <!-- Task rows -->
+                    <div id="taskList" class="px-4 pb-2"></div>
+
+                    <!-- Empty state (compacto) -->
+                    <div id="emptyState" class="hidden text-center py-8 px-6">
+                        <div id="emptyIcon" class="text-3xl mb-2">📋</div>
+                        <p id="emptyTitle" class="font-bold text-gray-600 text-base mb-1">No hay tareas aquí</p>
+                        <p id="emptySubtitle" class="text-sm text-gray-400 mb-4">Crea tu primera tarea para empezar</p>
+                        <button id="emptyAction" onclick="openModal()" class="font-bold px-5 py-2 rounded-lg text-white text-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)" data-i18n="tasks.empty.create">+ Crear tarea</button>
+                    </div>
+
+                    <!-- Ver todas -->
+                    <div class="px-6 pb-5 pt-2 border-t border-gray-50">
+                        <button onclick="applyFilter(document.querySelector('.pill'))" class="text-indigo-500 text-sm font-bold hover:text-indigo-700 transition-colors" data-i18n="tasks.viewAll">
+                            Ver todas las tareas →
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Panel (1/3) -->
+                <div class="flex flex-col gap-5">
+
+                    <!-- Donut chart — ocupa todo el panel derecho -->
+                    <div class="bg-white rounded-2xl border border-gray-100 p-5 flex-1" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-black text-lg text-gray-900" data-i18n="tasks.chart.weekly">Progreso semanal</h3>
+                            <span class="text-sm text-gray-400 font-semibold bg-gray-100 px-3 py-1 rounded-full" data-i18n="tasks.chart.thisWeek">Esta semana</span>
+                        </div>
+                        <div class="relative flex items-center justify-center mb-5" style="height:200px">
+                            <canvas id="donutChart" width="200" height="200"></canvas>
+                            <div class="absolute text-center pointer-events-none">
+                                <p class="text-3xl font-black text-gray-900" id="donutPct">0%</p>
+                                <p class="text-sm text-gray-400 font-medium" data-i18n="tasks.chart.completed">Completado</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-indigo-500 flex-shrink-0"></span><span class="text-gray-600 font-medium" data-i18n="tasks.chart.completedLabel">Completadas</span><span class="ml-auto font-black text-gray-800" id="lgCompleted">0</span></div>
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-blue-400 flex-shrink-0"></span><span class="text-gray-600 font-medium" data-i18n="tasks.chart.inProgress">En progreso</span><span class="ml-auto font-black text-gray-800" id="lgInProgress">0</span></div>
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400 flex-shrink-0"></span><span class="text-gray-600 font-medium" data-i18n="tasks.chart.pending">Pendientes</span><span class="ml-auto font-black text-gray-800" id="lgPending">0</span></div>
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-400 flex-shrink-0"></span><span class="text-gray-600 font-medium" data-i18n="tasks.chart.overdue">Vencidas</span><span class="ml-auto font-black text-gray-800" id="lgOverdue">0</span></div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ── BOTTOM GRID ── -->
+            <div class="grid grid-cols-2 gap-6">
+
+                <!-- Próximas tareas -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-5" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-black text-lg text-gray-900" data-i18n="tasks.upcoming">Próximas tareas</h3>
+                        <button type="button" onclick="showSection('calendar')" class="text-sm text-indigo-500 font-bold hover:text-indigo-700" data-i18n="tasks.upcoming.viewCal">Ver calendario →</button>
+                    </div>
+                    <div id="upcomingList" class="space-y-3">
+                        <p class="text-gray-400 text-sm text-center py-4">Cargando...</p>
+                    </div>
+                </div>
+
+                <!-- Tareas por prioridad -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-5" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-lg text-gray-900 mb-4" data-i18n="tasks.chart.byPriority">Tareas por prioridad</h3>
+                    <div style="height:200px">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+        </div><!-- end sectionTasks -->
+
+        <!-- ══ SECCIÓN: PROYECTOS ══ -->
+        <div id="sectionProjects" class="hidden">
+
+            <!-- ── VISTA LISTA ── -->
+            <div id="projectsListView">
+                <div class="flex items-start justify-between mb-7">
+                    <div>
+                        <h2 class="text-4xl font-black text-gray-900 mb-1">Proyectos 📁</h2>
+                        <p class="text-gray-400 text-lg">Tus tareas organizadas por proyecto o categoría.</p>
+                    </div>
+                    <button onclick="openNewProjectModal()"
+                        class="flex items-center gap-2 text-white font-black px-6 py-3.5 rounded-2xl text-lg transition-all"
+                        style="background:linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow:0 6px 20px rgba(99,102,241,.4)">
+                        <span class="text-xl leading-none">+</span> Crear nuevo proyecto
+                    </button>
+                </div>
+                <div id="projectsGrid" class="grid grid-cols-3 gap-5"></div>
+                <div id="projectsEmpty" class="hidden text-center py-24">
+                    <div class="text-6xl mb-4">📁</div>
+                    <p class="font-bold text-gray-600 text-xl mb-2">No hay proyectos aún</p>
+                    <p class="text-gray-400 mb-6 text-base">Crea tu primer proyecto para organizar tus tareas</p>
+                    <button onclick="openNewProjectModal()" class="font-bold px-6 py-3 rounded-xl text-white text-base"
+                        style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">+ Crear nuevo proyecto</button>
+                </div>
+            </div>
+
+            <!-- ── VISTA DETALLE ── -->
+            <div id="projectDetailView" class="hidden">
+
+                <!-- Volver -->
+                <button onclick="showProjectsList()"
+                    class="flex items-center gap-2 text-indigo-500 font-bold text-base mb-6 hover:text-indigo-700 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                    Volver a proyectos
+                </button>
+
+                <!-- Header del proyecto -->
+                <div class="flex items-start justify-between mb-7">
+                    <div class="flex items-center gap-4">
+                        <div id="pdIcon" class="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0">💼</div>
+                        <div>
+                            <h2 id="pdName" class="text-3xl font-black text-gray-900 mb-1">Proyecto</h2>
+                            <p id="pdSubtitle" class="text-gray-400 text-base">0 tareas</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button type="button" id="pdDeleteBtn"
+                            class="flex items-center gap-2 font-bold px-5 py-3.5 rounded-2xl text-base transition-all border-2 border-red-200 text-red-500 hover:bg-red-50">
+                            🗑️ Eliminar proyecto
+                        </button>
+                        <button id="pdNewTaskBtn"
+                            class="flex items-center gap-2 text-white font-black px-6 py-3.5 rounded-2xl text-base transition-all"
+                            style="background:linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow:0 6px 20px rgba(99,102,241,.4)">
+                            <span class="text-xl leading-none">+</span> Nueva tarea aquí
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats del proyecto -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-6 mb-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="font-bold text-gray-700 text-base">Progreso del proyecto</span>
+                        <span id="pdPct" class="text-2xl font-black text-indigo-600">0%</span>
+                    </div>
+                    <div class="h-3 bg-gray-100 rounded-full overflow-hidden mb-4">
+                        <div id="pdBar" class="h-full rounded-full transition-all duration-500"
+                             style="width:0%; background:linear-gradient(90deg,#6366f1,#8b5cf6)"></div>
+                    </div>
+                    <div class="flex gap-5 text-sm">
+                        <span class="font-bold text-green-600" id="pdCompleted">0 completadas</span>
+                        <span class="font-bold text-blue-500" id="pdInProgress">0 en progreso</span>
+                        <span class="font-bold text-amber-500" id="pdPending">0 pendientes</span>
+                        <span class="font-bold text-red-500" id="pdOverdue">0 vencidas</span>
+                    </div>
+                </div>
+
+                <!-- Filtros del proyecto -->
+                <div class="flex gap-2 mb-4">
+                    <button class="pill active" data-status="" onclick="applyProjectFilter(this)">Todas</button>
+                    <button class="pill" data-status="PENDING"     onclick="applyProjectFilter(this)">Pendientes</button>
+                    <button class="pill" data-status="IN_PROGRESS" onclick="applyProjectFilter(this)">En progreso</button>
+                    <button class="pill" data-status="COMPLETED"   onclick="applyProjectFilter(this)">Completadas</button>
+                </div>
+
+                <!-- Lista de tareas del proyecto -->
+                <div class="bg-white rounded-2xl border border-gray-100" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <div id="pdTaskList" class="px-4 py-2 min-h-24"></div>
+                    <div id="pdTaskEmpty" class="hidden text-center py-14 px-6">
+                        <div class="text-5xl mb-3">📋</div>
+                        <p class="font-bold text-gray-600 text-lg mb-2">No hay tareas en este filtro</p>
+                        <button id="pdCreateBtn"
+                            class="font-bold px-6 py-3 rounded-xl text-white text-sm mt-2"
+                            style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">+ Crear tarea en este proyecto</button>
+                    </div>
+                </div>
+
+            </div><!-- end projectDetailView -->
+
+        </div><!-- end sectionProjects -->
+
+        <!-- ══ SECCIÓN: CALENDARIO ══ -->
+        <div id="sectionCalendar" class="hidden">
+
+            <div class="flex items-start justify-between mb-7">
+                <div>
+                    <h2 class="text-4xl font-black text-gray-900 mb-1">Calendario 📅</h2>
+                    <p class="text-gray-400 text-lg">Visualiza todas tus tareas por fecha.</p>
+                </div>
+            </div>
+
+            <div class="grid gap-6" style="grid-template-columns:1fr 300px">
+
+                <!-- ── Grid del calendario ── -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+
+                    <!-- Navegación de mes -->
+                    <div class="flex items-center justify-between mb-5">
+                        <button onclick="calPrev()" class="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-500">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                        </button>
+                        <h3 id="calTitle" class="font-black text-xl text-gray-900 capitalize"></h3>
+                        <button onclick="calNext()" class="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-500">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- Cabecera días de semana -->
+                    <div class="grid grid-cols-7 mb-2">
+                        <div class="text-center text-xs font-black text-gray-400 py-1">Dom</div>
+                        <div class="text-center text-xs font-black text-gray-400 py-1">Lun</div>
+                        <div class="text-center text-xs font-black text-gray-400 py-1">Mar</div>
+                        <div class="text-center text-xs font-black text-gray-400 py-1">Mié</div>
+                        <div class="text-center text-xs font-black text-gray-400 py-1">Jue</div>
+                        <div class="text-center text-xs font-black text-gray-400 py-1">Vie</div>
+                        <div class="text-center text-xs font-black text-gray-400 py-1">Sáb</div>
+                    </div>
+
+                    <!-- Celdas del calendario -->
+                    <div id="calGrid" class="grid grid-cols-7 gap-1"></div>
+
+                    <!-- Leyenda -->
+                    <div class="flex items-center gap-4 mt-5 pt-4 border-t border-gray-50 text-xs font-bold text-gray-500">
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-2 rounded chip-pending inline-block"></span>Pendiente</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-2 rounded chip-progress inline-block"></span>En progreso</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-2 rounded chip-completed inline-block"></span>Completada</span>
+                    </div>
+                </div>
+
+                <!-- ── Panel detalle del día ── -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-5 self-start sticky top-0" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 id="calDayTitle" class="font-black text-lg text-gray-900 mb-1">Selecciona un día</h3>
+                    <p id="calDayCount" class="text-sm text-gray-400 mb-4"></p>
+                    <div id="calDayList">
+                        <p class="text-gray-400 text-sm text-center py-10">Haz click en un día<br>para ver sus tareas</p>
+                    </div>
+                </div>
+
+            </div>
+        </div><!-- end sectionCalendar -->
+
+        <!-- ══ SECCIÓN: REPORTES ══ -->
+        <div id="sectionReports" class="hidden">
+
+            <div class="flex items-start justify-between mb-7">
+                <div>
+                    <h2 class="text-4xl font-black text-gray-900 mb-1">Reportes 📊</h2>
+                    <p class="text-gray-400 text-lg">Analiza tu productividad y el estado de tus tareas.</p>
+                </div>
+            </div>
+
+            <!-- KPIs -->
+            <div class="grid grid-cols-4 gap-4 mb-7">
+                <div class="bg-white rounded-2xl p-5 border border-gray-100" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <p class="text-sm text-gray-500 font-medium mb-1">Completadas esta semana</p>
+                    <p id="repWeekCompleted" class="text-4xl font-black text-gray-900">0</p>
+                    <p id="repWeekDelta" class="text-sm font-semibold text-indigo-500 mt-1">—</p>
+                </div>
+                <div class="bg-white rounded-2xl p-5 border border-gray-100" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <p class="text-sm text-gray-500 font-medium mb-1">Tiempo medio de cierre</p>
+                    <p id="repAvgDays" class="text-4xl font-black text-gray-900">—</p>
+                    <p class="text-sm text-gray-400 mt-1">días desde creación</p>
+                </div>
+                <div class="bg-white rounded-2xl p-5 border border-gray-100" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <p class="text-sm text-gray-500 font-medium mb-1">Tasa de cumplimiento</p>
+                    <p id="repOnTimePct" class="text-4xl font-black text-gray-900">—</p>
+                    <p class="text-sm text-gray-400 mt-1">sin vencer al completar</p>
+                </div>
+                <div class="bg-white rounded-2xl p-5 border border-gray-100" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <p class="text-sm text-gray-500 font-medium mb-1">Tareas vencidas activas</p>
+                    <p id="repOverdueActive" class="text-4xl font-black text-red-500">0</p>
+                    <p id="repOverduePct" class="text-sm text-gray-400 mt-1">—</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-lg text-gray-900 mb-1">Completadas por semana</h3>
+                    <p class="text-sm text-gray-400 mb-4">Últimas 8 semanas</p>
+                    <div style="height:260px"><canvas id="repCompletedChart"></canvas></div>
+                </div>
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-lg text-gray-900 mb-1">Proyectos más activos</h3>
+                    <p class="text-sm text-gray-400 mb-4">Top 5 por número de tareas</p>
+                    <div style="height:260px"><canvas id="repProjectsChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-6">
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-lg text-gray-900 mb-1">Estado general</h3>
+                    <p class="text-sm text-gray-400 mb-4">Distribución actual de tus tareas</p>
+                    <div style="height:240px"><canvas id="repStatusChart"></canvas></div>
+                </div>
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-lg text-gray-900 mb-4">Resumen por proyecto</h3>
+                    <div id="repProjectTable" class="space-y-3"></div>
+                </div>
+            </div>
+
+        </div><!-- end sectionReports -->
+
+        <!-- ══ SECCIÓN: CONFIGURACIÓN ══ -->
+        <div id="sectionSettings" class="hidden">
+
+            <div class="mb-7">
+                <h2 class="text-4xl font-black text-gray-900 mb-1" data-i18n="settings.title">Configuración ⚙️</h2>
+                <p class="text-gray-400 text-lg" data-i18n="settings.subtitle">Personaliza tu perfil y preferencias de la aplicación.</p>
+            </div>
+
+            <div class="grid gap-6 max-w-3xl">
+
+                <!-- Perfil -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-xl text-gray-900 mb-1" data-i18n="settings.profile.title">Perfil</h3>
+                    <p class="text-sm text-gray-400 mb-5" data-i18n="settings.profile.subtitle">Tu nombre visible en Gestix</p>
+                    <form id="settingsProfileForm" onsubmit="saveUsername(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2" data-i18n="settings.profile.username">Nombre de usuario</label>
+                            <input type="text" id="settingsUsernameInput" required minlength="3" maxlength="50" class="field">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2" data-i18n="settings.profile.email">Email</label>
+                            <p id="settingsEmailDisplay" class="detail-value detail-value-muted py-3 px-4 detail-box">—</p>
+                        </div>
+                        <div id="settingsProfileMsg" class="hidden text-sm font-semibold rounded-xl px-4 py-3"></div>
+                        <button type="submit" id="settingsSaveBtn"
+                                class="px-6 py-3 rounded-xl text-white font-black transition-all"
+                                style="background:linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow:0 4px 14px rgba(99,102,241,.35)"
+                                data-i18n="settings.profile.save">Guardar cambios</button>
+                    </form>
+                </div>
+
+                <!-- Apariencia -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-xl text-gray-900 mb-1" data-i18n="settings.appearance.title">Apariencia</h3>
+                    <p class="text-sm text-gray-400 mb-4" data-i18n="settings.appearance.subtitle">Elige cómo se ve Gestix</p>
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3" data-i18n="settings.appearance.theme">Tema</p>
+                    <div class="flex flex-wrap gap-2 mb-2">
+                        <button type="button" class="option-btn theme-btn" data-theme="light" onclick="setTheme('light')" data-i18n="settings.appearance.light">Claro</button>
+                        <button type="button" class="option-btn theme-btn" data-theme="dark" onclick="setTheme('dark')" data-i18n="settings.appearance.dark">Oscuro</button>
+                        <button type="button" class="option-btn theme-btn" data-theme="auto" onclick="setTheme('auto')" data-i18n="settings.appearance.auto">Automático</button>
+                    </div>
+                    <p class="text-xs text-gray-400" data-i18n="settings.appearance.autoHint">Sigue la preferencia de tu sistema</p>
+                </div>
+
+                <!-- Idioma -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-xl text-gray-900 mb-1" data-i18n="settings.language.title">Idioma</h3>
+                    <p class="text-sm text-gray-400 mb-4" data-i18n="settings.language.subtitle">Idioma de la interfaz</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="option-btn lang-btn" data-lang="es" onclick="setLang('es')" data-i18n="settings.language.es">Español</button>
+                        <button type="button" class="option-btn lang-btn" data-lang="en" onclick="setLang('en')" data-i18n="settings.language.en">English</button>
+                    </div>
+                </div>
+
+                <!-- Sobre la app -->
+                <div class="bg-white rounded-2xl border border-gray-100 p-6" style="box-shadow:0 2px 10px rgba(0,0,0,.05)">
+                    <h3 class="font-black text-xl text-gray-900 mb-1" data-i18n="settings.about.title">Sobre Gestix</h3>
+                    <p class="text-sm text-gray-400 mb-4" data-i18n="settings.about.subtitle">Información, ayuda y legal</p>
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-xl"
+                             style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">G</div>
+                        <div>
+                            <p class="font-black text-gray-900 text-lg">Gestix</p>
+                            <p class="text-sm text-gray-500"><span data-i18n="settings.about.version">Versión</span> <span id="appVersion" class="font-bold text-indigo-500">0.0.1-SNAPSHOT</span></p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-500 mb-5 leading-relaxed" data-i18n="settings.about.tagline">Gestor de tareas personal — organiza proyectos, fechas y prioridades en un solo lugar.</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="settings-action-btn" onclick="openFaqModal()">❓ <span data-i18n="settings.about.faq">Ayuda / FAQ</span></button>
+                        <button type="button" class="settings-action-btn" onclick="openFeedbackModal()">💬 <span data-i18n="settings.about.feedback">Enviar feedback</span></button>
+                        <button type="button" class="settings-action-btn" onclick="openLegalModal('terms')">📄 <span data-i18n="settings.about.terms">Términos de uso</span></button>
+                        <button type="button" class="settings-action-btn" onclick="openLegalModal('privacy')">🔒 <span data-i18n="settings.about.privacy">Política de privacidad</span></button>
+                    </div>
+                </div>
+
+            </div>
+        </div><!-- end sectionSettings -->
+
+        </main><!-- end main -->
+    </div><!-- end main area -->
+</div><!-- end layout -->
+
+<!-- ══════════════════ MODAL NUEVO PROYECTO ══════════════════ -->
+<div id="newProjectModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6 modal-wrap">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md modal-panel">
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100">
+            <h3 class="text-xl font-black text-gray-900">📁 Nuevo Proyecto</h3>
+            <button onclick="closeNewProjectModal()" class="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xl transition-colors">×</button>
+        </div>
+        <form id="newProjectForm" onsubmit="handleCreateProject(event)" class="px-8 py-6 space-y-5">
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Nombre del proyecto *</label>
+                <input type="text" id="newProjectNameInput" placeholder="ej. Diseño Web, Marketing, App móvil..." required class="field">
+            </div>
+            <p class="text-sm text-gray-400">Podrás agregar tareas a este proyecto después de crearlo.</p>
+            <div id="newProjectError" class="hidden bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3 text-sm"></div>
+            <div class="flex justify-end gap-3 pt-1">
+                <button type="button" onclick="closeNewProjectModal()" class="px-6 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors">Cancelar</button>
+                <button type="submit" class="px-6 py-3 rounded-xl text-white font-black transition-all"
+                    style="background:linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow:0 4px 14px rgba(99,102,241,.35)">Crear Proyecto</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ══════════════════ MODAL CREAR/EDITAR ══════════════════ -->
+<div id="taskModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6 modal-wrap">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl modal-panel">
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100">
+            <h3 id="modalTitle" class="text-xl font-black text-gray-900">Nueva Tarea</h3>
+            <button onclick="closeModal()" class="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xl transition-colors">×</button>
+        </div>
+        <form id="taskForm" onsubmit="handleSaveTask(event)" class="px-8 py-6 space-y-5">
+            <input type="hidden" id="taskId">
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Título *</label>
+                <input type="text" id="taskTitle" placeholder="¿Qué hay que hacer?" required class="field">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Descripción</label>
+                <textarea id="taskDescription" placeholder="Detalles opcionales..." rows="3" class="field" style="resize:none"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Estado</label>
+                    <select id="taskStatus" class="field">
+                        <option value="PENDING">Pendiente</option>
+                        <option value="IN_PROGRESS">En progreso</option>
+                        <option value="COMPLETED">Completada</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Prioridad</label>
+                    <select id="taskPriority" class="field">
+                        <option value="LOW">🟢 Baja</option>
+                        <option value="MEDIUM" selected>🟡 Media</option>
+                        <option value="HIGH">🔴 Alta</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Categoría / Proyecto</label>
+                    <input type="text" id="taskCategory" placeholder="Trabajo, Personal..." class="field">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Fecha límite</label>
+                    <input type="date" id="taskDueDate" class="field">
+                </div>
+            </div>
+            <div id="taskError" class="hidden bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3 text-sm"></div>
+            <div class="flex justify-end gap-3 pt-1">
+                <button type="button" onclick="closeModal()" class="px-6 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors">Cancelar</button>
+                <button type="submit" class="px-6 py-3 rounded-xl text-white font-black transition-all" style="background:linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow:0 4px 14px rgba(99,102,241,.35)">Guardar tarea</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ══════════════════ MODAL DETALLE TAREA ══════════════════ -->
+<div id="taskDetailModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6 modal-wrap"
+     onclick="if(event.target===this) closeTaskDetailModal()">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl modal-panel">
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100">
+            <h3 class="text-xl font-black text-gray-900">Detalles de la tarea</h3>
+            <button type="button" onclick="closeTaskDetailModal()"
+                    class="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xl transition-colors">×</button>
+        </div>
+
+        <div class="px-8 py-6 space-y-5">
+            <div>
+                <span class="detail-label">Título</span>
+                <p id="detailTitle" class="text-xl font-black text-gray-900 leading-snug"></p>
+            </div>
+
+            <div>
+                <span class="detail-label">Descripción</span>
+                <div class="detail-box">
+                    <p id="detailDescription" class="detail-value detail-value-muted whitespace-pre-wrap"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <span class="detail-label">Estado</span>
+                    <p id="detailStatus" class="detail-value"></p>
+                </div>
+                <div>
+                    <span class="detail-label">Prioridad</span>
+                    <p id="detailPriority" class="detail-value"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <span class="detail-label">Proyecto</span>
+                    <p id="detailCategory" class="detail-value"></p>
+                </div>
+                <div>
+                    <span class="detail-label">Fecha límite</span>
+                    <p id="detailDueDate" class="detail-value"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 pt-1 border-t border-gray-100">
+                <div>
+                    <span class="detail-label">Creada</span>
+                    <p id="detailCreatedAt" class="detail-value detail-value-muted text-sm"></p>
+                </div>
+                <div>
+                    <span class="detail-label">Actualizada</span>
+                    <p id="detailUpdatedAt" class="detail-value detail-value-muted text-sm"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3 px-8 pb-6">
+            <button type="button" onclick="closeTaskDetailModal()"
+                    class="px-6 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors">
+                Cerrar
+            </button>
+            <button type="button" id="detailEditBtn"
+                    class="px-6 py-3 rounded-xl text-white font-black transition-all"
+                    style="background:linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow:0 4px 14px rgba(99,102,241,.35)">
+                Editar tarea
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ MODAL ELIMINAR PROYECTO ══════════════════ -->
+<div id="deleteProjectModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6 modal-wrap"
+     onclick="if(event.target===this) closeDeleteProjectModal()">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 modal-panel">
+        <div class="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">📁</div>
+        <h3 id="deleteProjectTitle" class="text-xl font-black text-gray-900 mb-3 text-center">¿Eliminar proyecto?</h3>
+        <p id="deleteProjectMessage" class="text-gray-500 text-sm leading-relaxed mb-2 text-center"></p>
+        <p class="text-red-500 text-sm font-semibold text-center mb-7">Esta acción no se puede deshacer.</p>
+        <div class="flex gap-3">
+            <button type="button" onclick="closeDeleteProjectModal()"
+                    class="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors">Cancelar</button>
+            <button type="button" id="deleteProjectConfirmBtn" onclick="confirmDeleteProject()"
+                    class="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-black transition-colors shadow-lg shadow-red-200">Eliminar proyecto</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ MODAL ELIMINAR ══════════════════ -->
+<div id="deleteModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6 modal-wrap">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center modal-panel">
+        <div class="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">🗑️</div>
+        <h3 class="text-xl font-black text-gray-900 mb-2">Eliminar tarea</h3>
+        <p class="text-gray-400 mb-7">Esta acción no se puede deshacer.</p>
+        <div class="flex gap-3">
+            <button onclick="closeDeleteModal()" class="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors">Cancelar</button>
+            <button onclick="confirmDelete()" class="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-black transition-colors shadow-lg shadow-red-200">Eliminar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ MODAL FAQ ══════════════════ -->
+<div id="faqModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6 modal-wrap"
+     onclick="if(event.target===this) closeFaqModal()">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg modal-panel max-h-[85vh] flex flex-col">
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 flex-shrink-0">
+            <h3 class="text-xl font-black text-gray-900" data-i18n="faq.title">Preguntas frecuentes</h3>
+            <button type="button" onclick="closeFaqModal()" class="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xl transition-colors">×</button>
+        </div>
+        <div class="px-8 py-4 overflow-y-auto flex-1">
+            <div class="faq-item">
+                <button type="button" class="faq-q" onclick="toggleFaqItem(this)"><span data-i18n="faq.q1">¿Cómo creo una tarea?</span><span class="faq-chevron">▾</span></button>
+                <div class="faq-a" data-i18n="faq.a1"></div>
+            </div>
+            <div class="faq-item">
+                <button type="button" class="faq-q" onclick="toggleFaqItem(this)"><span data-i18n="faq.q2">¿Cómo marco una tarea como completada?</span><span class="faq-chevron">▾</span></button>
+                <div class="faq-a" data-i18n="faq.a2"></div>
+            </div>
+            <div class="faq-item">
+                <button type="button" class="faq-q" onclick="toggleFaqItem(this)"><span data-i18n="faq.q3">¿Dónde se guardan mis proyectos?</span><span class="faq-chevron">▾</span></button>
+                <div class="faq-a" data-i18n="faq.a3"></div>
+            </div>
+            <div class="faq-item">
+                <button type="button" class="faq-q" onclick="toggleFaqItem(this)"><span data-i18n="faq.q4">¿Puedo iniciar sesión con Google o Microsoft?</span><span class="faq-chevron">▾</span></button>
+                <div class="faq-a" data-i18n="faq.a4"></div>
+            </div>
+            <div class="faq-item">
+                <button type="button" class="faq-q" onclick="toggleFaqItem(this)"><span data-i18n="faq.q5">¿Cómo cambio el idioma o el tema?</span><span class="faq-chevron">▾</span></button>
+                <div class="faq-a" data-i18n="faq.a5"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ MODAL FEEDBACK ══════════════════ -->
+<div id="feedbackModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6 modal-wrap"
+     onclick="if(event.target===this) closeFeedbackModal()">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md modal-panel">
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100">
+            <h3 class="text-xl font-black text-gray-900" data-i18n="feedback.title">Enviar feedback</h3>
+            <button type="button" onclick="closeFeedbackModal()" class="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xl transition-colors">×</button>
+        </div>
+        <form id="feedbackForm" onsubmit="submitFeedback(event)" class="px-8 py-6 space-y-4">
+            <p class="text-sm text-gray-400" data-i18n="feedback.subtitle">Cuéntanos qué mejorarías o si encontraste un problema.</p>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2" data-i18n="feedback.type">Tipo</label>
+                <select id="feedbackType" class="field">
+                    <option value="bug" data-i18n="feedback.type.bug">Reportar un error</option>
+                    <option value="idea" data-i18n="feedback.type.idea">Sugerencia de mejora</option>
+                    <option value="other" data-i18n="feedback.type.other">Otro</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2" data-i18n="feedback.message">Mensaje</label>
+                <textarea id="feedbackMessage" rows="5" required class="field" style="resize:vertical"
+                          data-i18n-placeholder="feedback.placeholder"></textarea>
+            </div>
+            <div id="feedbackMsg" class="hidden text-sm font-semibold rounded-xl px-4 py-3"></div>
+            <div class="flex gap-3 pt-1">
+                <button type="button" onclick="closeFeedbackModal()"
+                        class="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+                        data-i18n="feedback.cancel">Cancelar</button>
+                <button type="submit"
+                        class="flex-1 py-3 rounded-xl text-white font-black transition-all"
+                        style="background:linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow:0 4px 14px rgba(99,102,241,.35)"
+                        data-i18n="feedback.send">Enviar feedback</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ══════════════════ MODAL LEGAL (términos / privacidad) ══════════════════ -->
+<div id="legalModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6 modal-wrap"
+     onclick="if(event.target===this) closeLegalModal()">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg modal-panel max-h-[85vh] flex flex-col">
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 flex-shrink-0">
+            <h3 id="legalModalTitle" class="text-xl font-black text-gray-900"></h3>
+            <button type="button" onclick="closeLegalModal()" class="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xl transition-colors">×</button>
+        </div>
+        <div id="legalModalBody" class="px-8 py-6 overflow-y-auto flex-1 space-y-4 text-sm text-gray-600 leading-relaxed"></div>
+        <div class="px-8 pb-6 flex-shrink-0">
+            <button type="button" onclick="closeLegalModal()"
+                    class="w-full py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+                    data-i18n="legal.close">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ SCRIPTS ══════════════════ -->
+<script>
+    // ── OAuth2 token desde URL ──
+    (function() {
+        const p = new URLSearchParams(window.location.search);
+        if (p.get('token')) {
+            localStorage.setItem('token', p.get('token'));
+            localStorage.setItem('username', p.get('username') || '');
+            window.history.replaceState({}, document.title, '/dashboard.html');
+        }
+    })();
+
+    // ── Globals de filtro ──
+    window._activeStatus   = '';
+    window._activePriority = '';
+    window._searchTerm     = '';
+    window._activeCategory = '';
+    window._currentSection = 'tasks';
+
+    // ── Greeting con nombre real ──
+    const _uname = localStorage.getItem('username') || 'Usuario';
+    document.getElementById('greetName').textContent   = _uname;
+    document.getElementById('navUsername').textContent = _uname;
+    document.getElementById('headerAvatar').textContent = _uname.charAt(0).toUpperCase();
+
+    // ── User dropdown ──
+    (function initUserDropdown() {
+        // Decodificar email del JWT
+        let email = '';
+        try {
+            const t = localStorage.getItem('token');
+            if (t) email = JSON.parse(atob(t.split('.')[1])).sub || '';
+        } catch(e) {}
+
+        document.getElementById('dropName').textContent  = _uname;
+        document.getElementById('dropEmail').textContent = email;
+        document.getElementById('dropAvatar').textContent = _uname.charAt(0).toUpperCase();
+    })();
+
+    function toggleUserMenu() {
+        const panel   = document.getElementById('userMenuPanel');
+        const chevron = document.getElementById('userMenuChevron');
+        const open    = !panel.classList.contains('hidden');
+        panel.classList.toggle('hidden', open);
+        chevron.style.transform = open ? '' : 'rotate(180deg)';
+    }
+
+    // Cerrar al hacer click fuera
+    document.addEventListener('click', function(e) {
+        const wrapper = document.getElementById('userMenuWrapper');
+        if (wrapper && !wrapper.contains(e.target)) {
+            document.getElementById('userMenuPanel').classList.add('hidden');
+            document.getElementById('userMenuChevron').style.transform = '';
+        }
+    });
+
+    // ── Search ──
+    function handleSearch(val) {
+        window._searchTerm     = val.trim();
+        window._activeCategory = '';
+        loadTasks();
+    }
+    // Ctrl+K para enfocar búsqueda
+    document.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            document.getElementById('searchInput').focus();
+        }
+    });
+
+    // ── Cambio de sección ──
+    function showSection(name) {
+        window._currentSection = name;
+        document.getElementById('sectionTasks').classList.toggle('hidden',    name !== 'tasks');
+        document.getElementById('sectionProjects').classList.toggle('hidden', name !== 'projects');
+        document.getElementById('sectionCalendar').classList.toggle('hidden', name !== 'calendar');
+        document.getElementById('sectionReports').classList.toggle('hidden',  name !== 'reports');
+        document.getElementById('sectionSettings').classList.toggle('hidden', name !== 'settings');
+
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        const navIds = { tasks: 'navMisTareas', projects: 'navProyectos', calendar: 'navCalendario', reports: 'navReportes', settings: 'navSettings' };
+        const navEl = document.getElementById(navIds[name]);
+        if (navEl) navEl.classList.add('active');
+
+        window._refreshHeaderTitle(name);
+
+        if (name === 'projects') renderProjects();
+        if (name === 'calendar') renderCalendar();
+        if (name === 'reports')  renderReports();
+        if (name === 'settings') loadSettingsProfile();
+    }
+
+    window._refreshHeaderTitle = function(section) {
+        const sec = section || window._currentSection || 'tasks';
+        const keys = { tasks: 'header.tasks', projects: 'header.projects', calendar: 'header.calendar', reports: 'header.reports', settings: 'header.settings' };
+        const titleEl = document.getElementById('headerTitle');
+        if (titleEl) titleEl.textContent = t(keys[sec] || 'header.tasks');
+    };
+
+    // ── Paleta de proyectos (global para reutilizar) ──
+    const _projPalettes = [
+        { bg:'bg-indigo-100', accent:'#6366f1', emoji:'💼' },
+        { bg:'bg-blue-100',   accent:'#3b82f6', emoji:'🚀' },
+        { bg:'bg-purple-100', accent:'#8b5cf6', emoji:'🎯' },
+        { bg:'bg-green-100',  accent:'#22c55e', emoji:'✅' },
+        { bg:'bg-amber-100',  accent:'#f59e0b', emoji:'⚡' },
+        { bg:'bg-pink-100',   accent:'#ec4899', emoji:'🌟' },
+        { bg:'bg-teal-100',   accent:'#14b8a6', emoji:'🔧' },
+        { bg:'bg-orange-100', accent:'#f97316', emoji:'📊' },
+    ];
+    let _currentProject = null;
+    let _projectDetailFilter = '';
+
+    function _getProjectEntries() {
+        const allTasks = window._allTasks || [];
+        const stored   = window._allProjects || [];
+        const map = {};
+
+        stored.forEach(p => {
+            if (!map[p.name]) map[p.name] = { id: p.id, name: p.name, tasks: [] };
+        });
+        allTasks.forEach(t => {
+            const cat = t.category || 'Sin proyecto';
+            if (!map[cat]) map[cat] = { id: null, name: cat, tasks: [] };
+            map[cat].tasks.push(t);
+        });
+
+        return Object.values(map).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    }
+
+    function _getProjectMap() {
+        const entries = _getProjectEntries();
+        const map = {};
+        entries.forEach(e => { map[e.name] = e.tasks; });
+        return map;
+    }
+
+    // ── Lista de proyectos ──
+    function renderProjects() {
+        const grid  = document.getElementById('projectsGrid');
+        const empty = document.getElementById('projectsEmpty');
+        const entries = _getProjectEntries();
+
+        if (entries.length === 0) {
+            grid.innerHTML = '';
+            empty.classList.remove('hidden');
+            window._projectEntries = [];
+            return;
+        }
+        empty.classList.add('hidden');
+        const today = new Date(); today.setHours(0,0,0,0);
+
+        window._projectEntries = entries;
+
+        grid.innerHTML = entries.map(({ id, name: catName, tasks }, i) => {
+            const pal       = _projPalettes[i % _projPalettes.length];
+            const total     = tasks.length;
+            const completed = tasks.filter(t => t.status === 'COMPLETED').length;
+            const high      = tasks.filter(t => t.priority === 'HIGH').length;
+            const medium    = tasks.filter(t => t.priority === 'MEDIUM').length;
+            const low       = tasks.filter(t => t.priority === 'LOW').length;
+            const pct       = total > 0 ? Math.round((completed / total) * 100) : 0;
+            const overdue   = tasks.filter(t => t.dueDate && t.status !== 'COMPLETED' && new Date(t.dueDate+'T00:00:00') < today).length;
+            const safe      = catName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+            return `
+            <div class="bg-white rounded-2xl border border-gray-100 p-6 cursor-pointer relative
+                        hover:border-indigo-200 hover:-translate-y-1 transition-all duration-200 group/card"
+                 style="box-shadow:0 2px 10px rgba(0,0,0,.05)"
+                 onclick="openProjectDetail('${safe}')">
+                <button type="button" title="Eliminar proyecto"
+                        onclick="event.stopPropagation(); openDeleteProjectModalByIndex(${i})"
+                        class="absolute top-4 right-4 w-9 h-9 rounded-xl border border-gray-200 bg-white text-gray-400
+                               hover:text-red-500 hover:border-red-200 hover:bg-red-50 flex items-center justify-center
+                               opacity-0 group-hover/card:opacity-100 transition-all text-base">
+                    🗑️
+                </button>
+                <div class="flex items-center justify-between mb-5 pr-10">
+                    <div class="w-12 h-12 rounded-xl ${pal.bg} flex items-center justify-center text-2xl flex-shrink-0">${pal.emoji}</div>
+                    <div class="flex flex-col items-end gap-1">
+                        <span class="text-sm font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">${total} tarea${total!==1?'s':''}</span>
+                        ${overdue>0?`<span class="text-xs font-bold bg-red-50 text-red-500 px-2 py-0.5 rounded-full">⚠️ ${overdue} vencida${overdue!==1?'s':''}</span>`:''}
+                    </div>
+                </div>
+                <h3 class="font-black text-gray-900 text-lg mb-1 truncate" title="${catName}">${catName}</h3>
+                <p class="text-sm text-gray-400 mb-4">${completed} completada${completed!==1?'s':''} · ${total-completed} por hacer</p>
+                <div class="h-2.5 bg-gray-100 rounded-full mb-5 overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-500"
+                         style="width:${pct}%;background:linear-gradient(90deg,${pal.accent},${pal.accent}bb)"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex gap-1.5 flex-wrap">
+                        ${high  >0?`<span class="text-xs font-bold bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded-full">🔴 ${high}</span>`:''}
+                        ${medium>0?`<span class="text-xs font-bold bg-amber-50 text-amber-600 border border-amber-100 px-2 py-0.5 rounded-full">🟡 ${medium}</span>`:''}
+                        ${low   >0?`<span class="text-xs font-bold bg-green-50 text-green-600 border border-green-100 px-2 py-0.5 rounded-full">🟢 ${low}</span>`:''}
+                    </div>
+                    <span class="text-lg font-black" style="color:${pal.accent}">${pct}%</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // ── Detalle del proyecto ──
+    function openProjectDetail(name) {
+        _currentProject      = name;
+        _projectDetailFilter = '';
+        document.getElementById('projectsListView').classList.add('hidden');
+        document.getElementById('projectDetailView').classList.remove('hidden');
+        _renderProjectDetail();
+    }
+
+    function _renderProjectDetail() {
+        const name  = _currentProject;
+        const map   = _getProjectMap();
+        const tasks = map[name] || [];
+
+        // Paleta
+        const allNames = Object.keys(_getProjectMap());
+        const idx = allNames.indexOf(name);
+        const pal = _projPalettes[Math.max(0,idx) % _projPalettes.length];
+
+        // Header
+        const iconEl = document.getElementById('pdIcon');
+        iconEl.className = `w-16 h-16 rounded-2xl ${pal.bg} flex items-center justify-center text-3xl flex-shrink-0`;
+        iconEl.textContent = pal.emoji;
+        document.getElementById('pdName').textContent     = name;
+        document.getElementById('pdSubtitle').textContent = `${tasks.length} tarea${tasks.length!==1?'s':''}`;
+
+        // Stats
+        const total     = tasks.length;
+        const completed = tasks.filter(t => t.status==='COMPLETED').length;
+        const inProg    = tasks.filter(t => t.status==='IN_PROGRESS').length;
+        const pending   = tasks.filter(t => t.status==='PENDING').length;
+        const today     = new Date(); today.setHours(0,0,0,0);
+        const overdue   = tasks.filter(t => t.dueDate && t.status!=='COMPLETED' && new Date(t.dueDate+'T00:00:00') < today).length;
+        const pct       = total>0 ? Math.round((completed/total)*100) : 0;
+
+        document.getElementById('pdPct').textContent       = pct + '%';
+        document.getElementById('pdBar').style.width       = pct + '%';
+        document.getElementById('pdBar').style.background  = `linear-gradient(90deg,${pal.accent},${pal.accent}bb)`;
+        document.getElementById('pdCompleted').textContent = `${completed} completada${completed!==1?'s':''}`;
+        document.getElementById('pdInProgress').textContent= `${inProg} en progreso`;
+        document.getElementById('pdPending').textContent   = `${pending} pendiente${pending!==1?'s':''}`;
+        document.getElementById('pdOverdue').textContent   = overdue>0 ? `${overdue} vencida${overdue!==1?'s':''}` : '';
+
+        // Botones Nueva Tarea
+        const openForProject = () => {
+            openModal();
+            setTimeout(() => {
+                const f = document.getElementById('taskCategory');
+                if (f) f.value = name==='Sin proyecto' ? '' : name;
+            }, 20);
+        };
+        document.getElementById('pdNewTaskBtn').onclick = openForProject;
+        document.getElementById('pdCreateBtn').onclick  = openForProject;
+        document.getElementById('pdDeleteBtn').onclick = () => {
+            const entry = window._projectEntries.find(e => e.name === name);
+            openDeleteProjectModal(name, entry ? entry.id : null);
+        };
+
+        // Resetear pills
+        document.querySelectorAll('#projectDetailView .pill').forEach(b => b.classList.remove('active'));
+        const activePill = [...document.querySelectorAll('#projectDetailView .pill')]
+            .find(b => b.dataset.status === _projectDetailFilter);
+        if (activePill) activePill.classList.add('active');
+        else document.querySelector('#projectDetailView .pill').classList.add('active');
+
+        // Tareas filtradas
+        let filtered = [...tasks];
+        if (_projectDetailFilter) filtered = filtered.filter(t => t.status===_projectDetailFilter);
+
+        const list  = document.getElementById('pdTaskList');
+        const empty = document.getElementById('pdTaskEmpty');
+        if (filtered.length===0) { list.innerHTML=''; empty.classList.remove('hidden'); return; }
+        empty.classList.add('hidden');
+        const render = window._renderTask || (t=>`<div class="p-3">${t.title}</div>`);
+        list.innerHTML = filtered.map(render).join('');
+    }
+    window._renderProjectDetail = _renderProjectDetail;
+
+    function applyProjectFilter(btn) {
+        document.querySelectorAll('#projectDetailView .pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _projectDetailFilter = btn.dataset.status;
+        _renderProjectDetail();
+    }
+
+    function showProjectsList() {
+        _currentProject = null;
+        document.getElementById('projectsListView').classList.remove('hidden');
+        document.getElementById('projectDetailView').classList.add('hidden');
+    }
+
+    // ── Modal Nuevo Proyecto ──
+    function openNewProjectModal() {
+        document.getElementById('newProjectNameInput').value = '';
+        document.getElementById('newProjectError').classList.add('hidden');
+        document.getElementById('newProjectModal').classList.remove('hidden');
+    }
+    function closeNewProjectModal() {
+        document.getElementById('newProjectModal').classList.add('hidden');
+    }
+    async function handleCreateProject(e) {
+        e.preventDefault();
+        const name = document.getElementById('newProjectNameInput').value.trim();
+        const errEl = document.getElementById('newProjectError');
+        errEl.classList.add('hidden');
+        if (!name) return;
+
+        const existing = _getProjectEntries().some(p => p.name.toLowerCase() === name.toLowerCase());
+        if (existing) {
+            errEl.textContent = 'Ya existe un proyecto con ese nombre.';
+            errEl.classList.remove('hidden');
+            return;
+        }
+
+        try {
+            const res = await fetch('http://localhost:8080/api/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ name })
+            });
+            if (res.status === 401 || res.status === 403) { logout(); return; }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                errEl.textContent = data.message || 'No se pudo crear el proyecto.';
+                errEl.classList.remove('hidden');
+                return;
+            }
+            await loadProjects();
+            closeNewProjectModal();
+            renderProjects();
+            openProjectDetail(name);
+        } catch (_) {
+            errEl.textContent = 'Error de conexión al crear el proyecto.';
+            errEl.classList.remove('hidden');
+        }
+    }
+
+    function filterByProject(projectName) {
+        openProjectDetail(projectName);
+    }
+
+    function openDeleteProjectModalByIndex(index) {
+        const entry = (window._projectEntries || [])[index];
+        if (entry) openDeleteProjectModal(entry.name, entry.id);
+    }
+    window.openDeleteProjectModalByIndex = openDeleteProjectModalByIndex;
+
+    // ── Filtros pill ──
+    function applyFilter(btn) {
+        window._activeCategory = '';   // limpiar filtro de proyecto
+        window._activeOverdue  = false;
+        document.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        window._activeStatus   = btn.dataset.status;
+        window._activePriority = btn.dataset.priority;
+        // Sincronizar stat-card resaltada con la pill activa
+        _syncStatCardHighlight(btn.dataset.status, false);
+        loadTasks();
+    }
+
+    // ── Filtros por stat card (Total / Pendientes / En Progreso / Completadas / Vencidas) ──
+    function filterByStatCard(filterType) {
+        // Si estamos en otra sección, volver a "Mis Tareas"
+        if (window._currentSection && window._currentSection !== 'tasks') {
+            showSection('tasks');
+        }
+
+        // Resetear filtros que podrían estar activos
+        window._activeCategory = '';
+        window._activePriority = '';
+        window._searchTerm     = '';
+        const searchEl = document.getElementById('searchInput');
+        if (searchEl) searchEl.value = '';
+
+        // Mapear filterType → status / overdue
+        let pillStatus = '';
+        window._activeOverdue = false;
+
+        switch (filterType) {
+            case 'all':       pillStatus = '';            break;
+            case 'pending':   pillStatus = 'PENDING';     break;
+            case 'progress':  pillStatus = 'IN_PROGRESS'; break;
+            case 'completed': pillStatus = 'COMPLETED';   break;
+            case 'overdue':   pillStatus = ''; window._activeOverdue = true; break;
+        }
+        window._activeStatus = pillStatus;
+
+        // Sincronizar visualmente TODAS las pills (status + la de Vencidas)
+        document.querySelectorAll('#sectionTasks .pill').forEach(b => {
+            if (b.dataset.overdue === 'true') {
+                b.classList.toggle('active', window._activeOverdue);
+            } else {
+                const match = !window._activeOverdue && b.dataset.status === pillStatus;
+                b.classList.toggle('active', match);
+            }
+        });
+
+        // Resaltar la carta
+        _syncStatCardHighlight(pillStatus, window._activeOverdue, filterType);
+
+        // Cargar tareas filtradas
+        loadTasks();
+
+        // Scroll suave a la lista de tareas
+        const listEl = document.querySelector('#sectionTasks .col-span-2');
+        if (listEl) listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    /** Mantiene un único stat-card resaltado según el filtro activo. */
+    function _syncStatCardHighlight(status, overdue, explicitFilter) {
+        const map = { '': 'all', 'PENDING': 'pending', 'IN_PROGRESS': 'progress', 'COMPLETED': 'completed' };
+        const target = explicitFilter || (overdue ? 'overdue' : map[status]);
+        document.querySelectorAll('.stat-card').forEach(c => {
+            c.classList.toggle('active-card', c.dataset.filter === target);
+        });
+    }
+
+    // Limpiar el highlight de las stat-cards cuando se busca o se cambia de proyecto
+    const _origHandleSearch = window.handleSearch;
+    window.handleSearch = function(val) {
+        if (val && val.trim().length > 0) {
+            document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-card'));
+        }
+        if (typeof _origHandleSearch === 'function') return _origHandleSearch.call(this, val);
+    };
+
+    // ── Dark mode toggle ──
+    function isDarkMode() {
+        return document.documentElement.classList.contains('dark');
+    }
+
+    function getTheme() {
+        let theme = localStorage.getItem('gestix_theme');
+        if (!theme && localStorage.getItem('gestix_dark_mode') === '1') theme = 'dark';
+        return theme || 'light';
+    }
+
+    function resolveThemeDark(theme) {
+        return theme === 'dark'
+            || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+
+    function applyTheme(theme) {
+        const dark = resolveThemeDark(theme);
+        document.documentElement.classList.toggle('dark', dark);
+        document.body.classList.toggle('dark', dark);
+        updateChartsTheme();
+        if (window._allTasks && window._onTasksLoaded) {
+            window._onTasksLoaded(window._allTasks);
+        }
+    }
+
+    function setTheme(theme) {
+        localStorage.setItem('gestix_theme', theme);
+        localStorage.removeItem('gestix_dark_mode');
+        applyTheme(theme);
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === theme);
+        });
+    }
+    window.setTheme = setTheme;
+
+    function initThemeUI() {
+        const theme = getTheme();
+        applyTheme(theme);
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === theme);
+        });
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (getTheme() === 'auto') applyTheme('auto');
+        });
+    }
+
+    function setUserDisplayName(name) {
+        const display = name || t('user.default');
+        localStorage.setItem('username', display);
+        const greet = document.getElementById('greetName');
+        if (greet) greet.textContent = display;
+        document.getElementById('navUsername').textContent = display;
+        document.getElementById('headerAvatar').textContent = display.charAt(0).toUpperCase();
+        document.getElementById('dropName').textContent = display;
+        document.getElementById('dropAvatar').textContent = display.charAt(0).toUpperCase();
+        const h2 = document.querySelector('#sectionTasks h2');
+        if (h2) h2.innerHTML = t('tasks.greeting', { name: `<span id="greetName">${display}</span>` });
+    }
+
+    async function loadSettingsProfile() {
+        const input = document.getElementById('settingsUsernameInput');
+        const emailEl = document.getElementById('settingsEmailDisplay');
+        const msgEl = document.getElementById('settingsProfileMsg');
+        if (msgEl) msgEl.classList.add('hidden');
+
+        try {
+            const res = await fetch('http://localhost:8080/api/users/me', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (!res.ok) throw new Error('fail');
+            const data = await res.json();
+            if (input) input.value = data.username || '';
+            if (emailEl) emailEl.textContent = data.email || '—';
+        } catch (_) {
+            if (input) input.value = localStorage.getItem('username') || '';
+        }
+    }
+
+    async function saveUsername(e) {
+        e.preventDefault();
+        const input = document.getElementById('settingsUsernameInput');
+        const msgEl = document.getElementById('settingsProfileMsg');
+        const btn   = document.getElementById('settingsSaveBtn');
+        const username = input.value.trim();
+
+        if (btn) btn.disabled = true;
+        msgEl.classList.add('hidden');
+
+        try {
+            const res = await fetch('http://localhost:8080/api/users/me', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ username })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || t('settings.profile.error'));
+
+            setUserDisplayName(data.username);
+            msgEl.textContent = t('settings.profile.saved');
+            msgEl.className = 'text-sm font-semibold rounded-xl px-4 py-3 bg-green-50 text-green-600 border border-green-200';
+            msgEl.classList.remove('hidden');
+        } catch (err) {
+            msgEl.textContent = err.message || t('settings.profile.error');
+            msgEl.className = 'text-sm font-semibold rounded-xl px-4 py-3 bg-red-50 text-red-600 border border-red-200';
+            msgEl.classList.remove('hidden');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+    window.saveUsername = saveUsername;
+
+    const GESTIX_VERSION = '0.0.1-SNAPSHOT';
+    const FEEDBACK_EMAIL = 'soporte@gestix.app';
+
+    function openFaqModal() {
+        applyI18n();
+        document.querySelectorAll('.faq-q').forEach(q => q.classList.remove('open'));
+        document.querySelectorAll('.faq-a').forEach(a => a.classList.remove('open'));
+        document.getElementById('faqModal').classList.remove('hidden');
+    }
+    function closeFaqModal() {
+        document.getElementById('faqModal').classList.add('hidden');
+    }
+    function toggleFaqItem(btn) {
+        const answer = btn.nextElementSibling;
+        const isOpen = btn.classList.contains('open');
+        document.querySelectorAll('.faq-q').forEach(q => q.classList.remove('open'));
+        document.querySelectorAll('.faq-a').forEach(a => a.classList.remove('open'));
+        if (!isOpen) {
+            btn.classList.add('open');
+            if (answer) answer.classList.add('open');
+        }
+    }
+    window.openFaqModal = openFaqModal;
+
+    function openFeedbackModal() {
+        document.getElementById('feedbackForm').reset();
+        document.getElementById('feedbackMsg').classList.add('hidden');
+        applyI18n();
+        document.getElementById('feedbackModal').classList.remove('hidden');
+    }
+    function closeFeedbackModal() {
+        document.getElementById('feedbackModal').classList.add('hidden');
+    }
+    function submitFeedback(e) {
+        e.preventDefault();
+        const msgEl = document.getElementById('feedbackMsg');
+        const message = document.getElementById('feedbackMessage').value.trim();
+        const typeKey = document.getElementById('feedbackType').value;
+        const typeLabels = { bug: 'feedback.type.bug', idea: 'feedback.type.idea', other: 'feedback.type.other' };
+
+        if (!message) {
+            msgEl.textContent = t('feedback.error');
+            msgEl.className = 'text-sm font-semibold rounded-xl px-4 py-3 bg-red-50 text-red-600 border border-red-200';
+            msgEl.classList.remove('hidden');
+            return;
+        }
+
+        const user = localStorage.getItem('username') || t('user.default');
+        const subject = `[Gestix Feedback] ${t(typeLabels[typeKey] || 'feedback.type.other')}`;
+        const body = `Usuario: ${user}\nVersión: ${GESTIX_VERSION}\nTipo: ${t(typeLabels[typeKey] || 'feedback.type.other')}\n\n${message}`;
+        window.location.href = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+        msgEl.textContent = t('feedback.success');
+        msgEl.className = 'text-sm font-semibold rounded-xl px-4 py-3 bg-green-50 text-green-600 border border-green-200';
+        msgEl.classList.remove('hidden');
+        setTimeout(closeFeedbackModal, 2200);
+    }
+    window.openFeedbackModal = openFeedbackModal;
+    window.submitFeedback = submitFeedback;
+
+    function openLegalModal(kind) {
+        const titleEl = document.getElementById('legalModalTitle');
+        const bodyEl  = document.getElementById('legalModalBody');
+        const prefix  = kind === 'privacy' ? 'privacy' : 'terms';
+        titleEl.textContent = t(`${prefix}.title`);
+        bodyEl.innerHTML = ['p1', 'p2', 'p3', 'p4'].map(n => `<p>${t(`${prefix}.${n}`)}</p>`).join('');
+        document.getElementById('legalModal').classList.remove('hidden');
+    }
+    function closeLegalModal() {
+        document.getElementById('legalModal').classList.add('hidden');
+    }
+    window.openLegalModal = openLegalModal;
+
+
+    window._refreshChartLabels = function() {
+        if (barChart) {
+            barChart.data.labels = [t('chart.priority.high'), t('chart.priority.medium'), t('chart.priority.low')];
+            barChart.update('none');
+        }
+    };
+
+    function updateChartsTheme() {
+        const dark = isDarkMode();
+        const gridColor = dark ? '#2a2f3d' : '#f3f4f6';
+        const tickColor = dark ? '#9ca3af' : '#6b7280';
+        if (barChart) {
+            barChart.options.scales.y.grid.color = gridColor;
+            barChart.options.scales.y.ticks.color = tickColor;
+            barChart.options.scales.x.ticks.color = tickColor;
+            barChart.update('none');
+        }
+        const { grid, tick } = _repChartColors();
+        if (repCompletedChart) {
+            repCompletedChart.options.scales.y.grid.color = grid;
+            repCompletedChart.options.scales.y.ticks.color = tick;
+            repCompletedChart.options.scales.x.ticks.color = tick;
+            repCompletedChart.update('none');
+        }
+        if (repProjectsChart) {
+            repProjectsChart.options.scales.x.grid.color = grid;
+            repProjectsChart.options.scales.x.ticks.color = tick;
+            repProjectsChart.options.scales.y.ticks.color = tick;
+            repProjectsChart.update('none');
+        }
+        if (repStatusChart) {
+            repStatusChart.options.plugins.legend.labels.color = tick;
+            repStatusChart.update('none');
+        }
+    }
+
+    // ── Sidebar toggle (con persistencia) ──
+    function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        const collapsed = sb.classList.toggle('collapsed');
+        document.body.classList.toggle('sidebar-collapsed', collapsed);
+        localStorage.setItem('gestix_sidebar_collapsed', collapsed ? '1' : '0');
+    }
+
+    // Restaurar estado al cargar
+    (function restoreSidebar() {
+        if (localStorage.getItem('gestix_sidebar_collapsed') === '1') {
+            document.getElementById('sidebar').classList.add('collapsed');
+            document.body.classList.add('sidebar-collapsed');
+        }
+    })();
+
+    // ── Charts ──
+    let donutChart = null;
+    let barChart   = null;
+
+    function initCharts() {
+        const donutCtx = document.getElementById('donutChart').getContext('2d');
+        donutChart = new Chart(donutCtx, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [0, 0, 0, 0],
+                    backgroundColor: ['#6366f1','#60a5fa','#fbbf24','#f87171'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                cutout: '72%',
+                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                animation: { animateRotate: true, duration: 800 }
+            }
+        });
+
+        const barCtx = document.getElementById('barChart').getContext('2d');
+        barChart = new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: [t('chart.priority.high'), t('chart.priority.medium'), t('chart.priority.low')],
+                datasets: [{
+                    data: [0, 0, 0],
+                    backgroundColor: ['#f87171','#fbbf24','#4ade80'],
+                    borderRadius: 8,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 13 } }, grid: { color: '#f3f4f6' } },
+                    x: { ticks: { font: { size: 14, weight: '700' } }, grid: { display: false } }
+                },
+                animation: { duration: 600 }
+            }
+        });
+        updateChartsTheme();
+    }
+
+    // ── Stats callback (llamado por tasks.js) ──
+    window._onTasksLoaded = function(allTasks) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const total      = allTasks.length;
+        const pending    = allTasks.filter(t => t.status === 'PENDING').length;
+        const inProgress = allTasks.filter(t => t.status === 'IN_PROGRESS').length;
+        const completed  = allTasks.filter(t => t.status === 'COMPLETED').length;
+        const overdue    = allTasks.filter(t => {
+            if (!t.dueDate || t.status === 'COMPLETED') return false;
+            return new Date(t.dueDate + 'T00:00:00') < today;
+        }).length;
+        const highCount  = allTasks.filter(t => t.priority === 'HIGH').length;
+        const medCount   = allTasks.filter(t => t.priority === 'MEDIUM').length;
+        const lowCount   = allTasks.filter(t => t.priority === 'LOW').length;
+
+        // Stat cards
+        document.getElementById('statTotal').textContent      = total;
+        document.getElementById('statPending').textContent    = pending;
+        document.getElementById('statInProgress').textContent = inProgress;
+        document.getElementById('statCompleted').textContent  = completed;
+        document.getElementById('statOverdue').textContent    = overdue;
+
+        document.getElementById('statTotalSub').textContent      = total === 0 ? 'Sin tareas aún' : total + ' en total';
+        document.getElementById('statPendingSub').textContent     = pending > 0 ? '+' + pending + ' nuevas' : 'Al día 🎉';
+        document.getElementById('statCompletedSub').textContent   = completed > 0 ? '+' + completed + ' completadas' : 'Sigue adelante 💪';
+        document.getElementById('statOverdueSub').textContent     = overdue > 0 ? 'Requieren atención' : 'Todo al día ✅';
+
+        // Notif badge (elemento opcional — puede no existir si se eliminó la campana)
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            if (overdue > 0) {
+                badge.textContent = overdue > 9 ? '9+' : overdue;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        // Donut
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        document.getElementById('donutPct').textContent = pct + '%';
+        document.getElementById('lgCompleted').textContent  = completed;
+        document.getElementById('lgInProgress').textContent = inProgress;
+        document.getElementById('lgPending').textContent    = pending;
+        document.getElementById('lgOverdue').textContent    = overdue;
+        if (donutChart) {
+            const empty = total === 0 ? 1 : 0;
+            donutChart.data.datasets[0].data = total > 0
+                ? [completed, inProgress, pending, overdue]
+                : [0, 0, 0, 0, 1];
+            donutChart.data.datasets[0].backgroundColor = total > 0
+                ? ['#6366f1','#60a5fa','#fbbf24','#f87171']
+                : [isDarkMode() ? '#2a2f3d' : '#f3f4f6'];
+            donutChart.update();
+        }
+
+        // Bar
+        if (barChart) {
+            barChart.data.datasets[0].data = [highCount, medCount, lowCount];
+            updateChartsTheme();
+            barChart.update();
+        }
+
+        // Refrescar sección activa
+        if (window._currentSection === 'projects') renderProjects();
+        if (window._currentSection === 'calendar')  renderCalendar();
+        if (window._currentSection === 'reports')   renderReports();
+
+        // Próximas tareas
+        const upcoming = allTasks
+            .filter(t => t.dueDate && t.status !== 'COMPLETED')
+            .map(t => ({ ...t, _date: new Date(t.dueDate + 'T00:00:00') }))
+            .filter(t => t._date >= today)
+            .sort((a, b) => a._date - b._date)
+            .slice(0, 5);
+        renderUpcoming(upcoming, today);
+    };
+
+    function renderUpcoming(tasks, today) {
+        const el = document.getElementById('upcomingList');
+        if (tasks.length === 0) {
+            el.innerHTML = '<p class="text-gray-400 text-sm text-center py-4">' + t('tasks.upcoming.empty') + '</p>';
+            return;
+        }
+        const colors = { HIGH: 'bg-red-400', MEDIUM: 'bg-amber-400', LOW: 'bg-green-400' };
+        el.innerHTML = tasks.map(t => {
+            const d = t._date;
+            const diff = Math.round((d - today) / 86400000);
+            let dateStr;
+            if (diff === 0) dateStr = 'Hoy';
+            else if (diff === 1) dateStr = 'Mañana';
+            else dateStr = d.toLocaleDateString('es', { day:'numeric', month:'short' });
+            const timeStr = diff <= 1 ? '' : d.toLocaleDateString('es', { weekday:'short' });
+            return `
+            <div class="flex items-center justify-between group">
+                <div class="flex items-center gap-3 min-w-0">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0 ${colors[t.priority] || 'bg-gray-300'}"></span>
+                    <span class="text-base font-semibold text-gray-700 truncate">${t.title}</span>
+                </div>
+                <span class="text-sm text-gray-400 font-medium flex-shrink-0 ml-3">${diff === 0 ? '🔴' : diff === 1 ? '🟡' : '🔵'} ${dateStr}</span>
+            </div>`;
+        }).join('');
+    }
+
+    // ── Task row renderer ──
+    function isTaskOverdue(task) {
+        if (!task.dueDate || task.status === 'COMPLETED') return false;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        return new Date(task.dueDate + 'T00:00:00') < today;
+    }
+
+    function getTaskStatusDisplay(task) {
+        if (isTaskOverdue(task)) {
+            return { icon: '⚠', label: t('status.overdue'), cls: 'text-red-500' };
+        }
+        const sMap = {
+            PENDING:     { icon: '○', label: t('status.pending'),   cls: 'text-gray-500' },
+            IN_PROGRESS: { icon: '●', label: t('status.progress'), cls: 'text-blue-500' },
+            COMPLETED:   { icon: '✓', label: t('status.completed'),  cls: 'text-green-500' }
+        };
+        return sMap[task.status] || sMap.PENDING;
+    }
+
+    function formatDetailDate(isoDate) {
+        if (!isoDate) return '—';
+        const d = new Date(isoDate + (isoDate.length === 10 ? 'T00:00:00' : ''));
+        if (Number.isNaN(d.getTime())) return '—';
+        return d.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    function formatDateTime(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '—';
+        return d.toLocaleString('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    let _detailTaskId = null;
+
+    function openTaskDetailModal(id) {
+        const task = (window._allTasks || []).find(t => t.id === id);
+        if (!task) return;
+
+        _detailTaskId = id;
+
+        const pMap = {
+            HIGH:   { dot: '🔴', label: 'Alta',  cls: 'text-red-600' },
+            MEDIUM: { dot: '🟡', label: 'Media', cls: 'text-amber-600' },
+            LOW:    { dot: '🟢', label: 'Baja',  cls: 'text-green-600' }
+        };
+        const p = pMap[task.priority] || pMap.MEDIUM;
+        const s = getTaskStatusDisplay(task);
+
+        document.getElementById('detailTitle').textContent = task.title;
+        document.getElementById('detailDescription').textContent = task.description?.trim() || 'Sin descripción';
+        document.getElementById('detailStatus').innerHTML =
+            `<span class="${s.cls} font-bold flex items-center gap-1.5"><span>${s.icon}</span>${s.label}</span>`;
+        document.getElementById('detailPriority').innerHTML =
+            `<span class="${p.cls} font-bold">${p.dot} ${p.label}</span>`;
+        document.getElementById('detailCategory').textContent = task.category || 'General';
+        document.getElementById('detailDueDate').textContent = formatDetailDate(task.dueDate);
+        document.getElementById('detailCreatedAt').textContent = formatDateTime(task.createdAt);
+        document.getElementById('detailUpdatedAt').textContent = formatDateTime(task.updatedAt);
+
+        document.getElementById('detailEditBtn').onclick = () => {
+            closeTaskDetailModal();
+            openEditModal(id);
+        };
+
+        document.getElementById('taskDetailModal').classList.remove('hidden');
+    }
+
+    function closeTaskDetailModal() {
+        document.getElementById('taskDetailModal').classList.add('hidden');
+        _detailTaskId = null;
+    }
+
+    window.openTaskDetailModal = openTaskDetailModal;
+    window.closeTaskDetailModal = closeTaskDetailModal;
+
+    // Cerrar detalle con Escape
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !document.getElementById('taskDetailModal').classList.contains('hidden')) {
+            closeTaskDetailModal();
+        }
+    });
+
+    function renderTask(task) {
+        const pMap = {
+            HIGH:   { dot: '🔴', label: t('priority.high'),  cls: 'bg-red-50 text-red-600 border border-red-200' },
+            MEDIUM: { dot: '🟡', label: t('priority.medium'), cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200' },
+            LOW:    { dot: '🟢', label: t('priority.low'),   cls: 'bg-green-50 text-green-700 border border-green-200' }
+        };
+        const p = pMap[task.priority] || pMap.MEDIUM;
+        const s = getTaskStatusDisplay(task);
+
+        let dateStr = '';
+        if (task.dueDate) {
+            const d = new Date(task.dueDate + 'T00:00:00');
+            dateStr = d.toLocaleDateString(getLang() === 'en' ? 'en' : 'es', { day:'numeric', month:'short' });
+        }
+
+        const isDone = task.status === 'COMPLETED';
+
+        return `
+        <div class="task-row flex items-center py-4 px-3 rounded-xl group border-b border-gray-50 last:border-0"
+             onclick="openTaskDetailModal(${task.id})" role="button" tabindex="0"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskDetailModal(${task.id})}">
+            <div class="checkbox-circle mr-4 ${isDone ? 'done' : ''}"
+                 onclick="toggleTaskComplete(${task.id}, event)"
+                 title="${isDone ? t('tasks.checkbox.uncomplete') : t('tasks.checkbox.complete')}">${isDone ? '✓' : ''}</div>
+            <div class="flex-1 min-w-0 mr-4">
+                <p class="font-semibold text-gray-900 text-base leading-snug ${isDone ? 'line-through opacity-60' : ''}">${task.title}</p>
+                <p class="text-sm text-gray-400 mt-0.5">Proyecto: ${task.category || 'General'}</p>
+            </div>
+            <span class="text-sm font-bold px-3 py-1 rounded-full mr-3 flex-shrink-0 ${p.cls}">${p.dot} ${p.label}</span>
+            <span class="text-base font-semibold ${s.cls} mr-5 flex-shrink-0 w-32 flex items-center gap-1">
+                <span class="text-sm">${s.icon}</span> ${s.label}
+            </span>
+            <span class="text-base text-gray-400 font-medium flex-shrink-0 w-16">${dateStr}</span>
+            <div class="row-actions flex gap-1 ml-2 flex-shrink-0" onclick="event.stopPropagation()">
+                <button type="button" onclick="openEditModal(${task.id})" title="Editar"
+                    class="p-1.5 rounded-lg hover:bg-indigo-50 text-gray-300 hover:text-indigo-500 transition-all">✏️</button>
+                <button type="button" onclick="openDeleteModal(${task.id})" title="Eliminar"
+                    class="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all">🗑️</button>
+            </div>
+        </div>`;
+    }
+    window._renderTask = renderTask;
+
+    // ══ REPORTES ══
+    let repCompletedChart = null;
+    let repProjectsChart  = null;
+    let repStatusChart    = null;
+
+    function _repChartColors() {
+        const dark = isDarkMode();
+        return {
+            grid: dark ? '#2a2f3d' : '#f3f4f6',
+            tick: dark ? '#9ca3af' : '#6b7280'
+        };
+    }
+
+    function initReportCharts() {
+        const { grid, tick } = _repChartColors();
+
+        const el1 = document.getElementById('repCompletedChart');
+        if (el1 && !repCompletedChart) {
+            repCompletedChart = new Chart(el1.getContext('2d'), {
+                type: 'bar',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: '#6366f1', borderRadius: 8, borderSkipped: false }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1, color: tick }, grid: { color: grid } },
+                        x: { ticks: { color: tick }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        const el2 = document.getElementById('repProjectsChart');
+        if (el2 && !repProjectsChart) {
+            repProjectsChart = new Chart(el2.getContext('2d'), {
+                type: 'bar',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: ['#6366f1','#8b5cf6','#3b82f6','#22c55e','#f59e0b'], borderRadius: 8, borderSkipped: false }] },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { stepSize: 1, color: tick }, grid: { color: grid } },
+                        y: { ticks: { color: tick }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        const el3 = document.getElementById('repStatusChart');
+        if (el3 && !repStatusChart) {
+            repStatusChart = new Chart(el3.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Completadas', 'En progreso', 'Pendientes'],
+                    datasets: [{ data: [0, 0, 0], backgroundColor: ['#6366f1', '#60a5fa', '#fbbf24'], borderWidth: 0 }]
+                },
+                options: { cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: tick, boxWidth: 12 } } } }
+            });
+        }
+    }
+
+    function renderReports() {
+        initReportCharts();
+        const allTasks = window._allTasks || [];
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const { grid, tick } = _repChartColors();
+
+        const parseDt = s => s ? new Date(s.replace(' ', 'T')) : null;
+        const startOfWeek = d => {
+            const x = new Date(d);
+            x.setDate(x.getDate() - x.getDay());
+            x.setHours(0, 0, 0, 0);
+            return x;
+        };
+
+        const thisWeekStart = startOfWeek(today);
+        const lastWeekStart = new Date(thisWeekStart);
+        lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+        const completedTasks = allTasks.filter(t => t.status === 'COMPLETED');
+        const completedThisWeek = completedTasks.filter(t => {
+            const u = parseDt(t.updatedAt);
+            return u && u >= thisWeekStart;
+        }).length;
+        const completedLastWeek = completedTasks.filter(t => {
+            const u = parseDt(t.updatedAt);
+            return u && u >= lastWeekStart && u < thisWeekStart;
+        }).length;
+
+        document.getElementById('repWeekCompleted').textContent = completedThisWeek;
+        const deltaEl = document.getElementById('repWeekDelta');
+        if (completedThisWeek > completedLastWeek) {
+            deltaEl.textContent = `+${completedThisWeek - completedLastWeek} vs semana anterior`;
+            deltaEl.className = 'text-sm font-semibold text-green-500 mt-1';
+        } else if (completedThisWeek < completedLastWeek) {
+            deltaEl.textContent = `${completedThisWeek - completedLastWeek} vs semana anterior`;
+            deltaEl.className = 'text-sm font-semibold text-red-500 mt-1';
+        } else {
+            deltaEl.textContent = 'Igual que la semana anterior';
+            deltaEl.className = 'text-sm font-semibold text-gray-400 mt-1';
+        }
+
+        const withDuration = completedTasks.filter(t => t.createdAt && t.updatedAt);
+        if (withDuration.length > 0) {
+            const avgDays = withDuration.reduce((sum, t) => {
+                const c = parseDt(t.createdAt);
+                const u = parseDt(t.updatedAt);
+                return sum + Math.max(0, (u - c) / 86400000);
+            }, 0) / withDuration.length;
+            document.getElementById('repAvgDays').textContent = avgDays < 1 ? '<1' : Math.round(avgDays);
+        } else {
+            document.getElementById('repAvgDays').textContent = '—';
+        }
+
+        const withDue = completedTasks.filter(t => t.dueDate && t.updatedAt);
+        if (withDue.length > 0) {
+            const onTime = withDue.filter(t => {
+                const u = parseDt(t.updatedAt);
+                const due = new Date(t.dueDate + 'T23:59:59');
+                return u && u <= due;
+            }).length;
+            document.getElementById('repOnTimePct').textContent = Math.round((onTime / withDue.length) * 100) + '%';
+        } else {
+            document.getElementById('repOnTimePct').textContent = '—';
+        }
+
+        const overdueActive = allTasks.filter(t =>
+            t.dueDate && t.status !== 'COMPLETED' &&
+            new Date(t.dueDate + 'T00:00:00') < today
+        ).length;
+        const activeWithDue = allTasks.filter(t => t.dueDate && t.status !== 'COMPLETED').length;
+        document.getElementById('repOverdueActive').textContent = overdueActive;
+        document.getElementById('repOverduePct').textContent = activeWithDue > 0
+            ? `${Math.round((overdueActive / activeWithDue) * 100)}% de tareas activas con fecha`
+            : 'Sin tareas activas con fecha';
+
+        // Completadas por semana (8 semanas)
+        const weekLabels = [];
+        const weekData = [];
+        for (let i = 7; i >= 0; i--) {
+            const ws = new Date(thisWeekStart);
+            ws.setDate(ws.getDate() - i * 7);
+            const we = new Date(ws);
+            we.setDate(we.getDate() + 7);
+            weekLabels.push(i === 0 ? 'Esta sem.' : ws.toLocaleDateString('es', { day: 'numeric', month: 'short' }));
+            weekData.push(completedTasks.filter(t => {
+                const u = parseDt(t.updatedAt);
+                return u && u >= ws && u < we;
+            }).length);
+        }
+        if (repCompletedChart) {
+            repCompletedChart.data.labels = weekLabels;
+            repCompletedChart.data.datasets[0].data = weekData;
+            repCompletedChart.options.scales.y.grid.color = grid;
+            repCompletedChart.options.scales.y.ticks.color = tick;
+            repCompletedChart.options.scales.x.ticks.color = tick;
+            repCompletedChart.update();
+        }
+
+        // Top proyectos
+        const byProject = {};
+        allTasks.forEach(t => {
+            const p = t.category || 'Sin proyecto';
+            byProject[p] = (byProject[p] || 0) + 1;
+        });
+        const topProjects = Object.entries(byProject).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        if (repProjectsChart) {
+            repProjectsChart.data.labels = topProjects.map(([n]) => n.length > 18 ? n.slice(0, 16) + '…' : n);
+            repProjectsChart.data.datasets[0].data = topProjects.map(([, c]) => c);
+            repProjectsChart.options.scales.x.grid.color = grid;
+            repProjectsChart.options.scales.x.ticks.color = tick;
+            repProjectsChart.options.scales.y.ticks.color = tick;
+            repProjectsChart.update();
+        }
+
+        const pending   = allTasks.filter(t => t.status === 'PENDING').length;
+        const inProg    = allTasks.filter(t => t.status === 'IN_PROGRESS').length;
+        const completed = completedTasks.length;
+        if (repStatusChart) {
+            repStatusChart.data.datasets[0].data = [completed, inProg, pending];
+            repStatusChart.options.plugins.legend.labels.color = tick;
+            repStatusChart.update();
+        }
+
+        // Tabla resumen por proyecto
+        const tableEl = document.getElementById('repProjectTable');
+        const entries = _getProjectEntries();
+        if (entries.length === 0) {
+            tableEl.innerHTML = '<p class="text-gray-400 text-sm text-center py-6">No hay proyectos con tareas aún</p>';
+        } else {
+            tableEl.innerHTML = entries.map(({ name, tasks }) => {
+                const done = tasks.filter(t => t.status === 'COMPLETED').length;
+                const pct  = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
+                const od   = tasks.filter(t => t.dueDate && t.status !== 'COMPLETED' && new Date(t.dueDate + 'T00:00:00') < today).length;
+                return `
+                <div class="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                    <div class="flex-1 min-w-0">
+                        <p class="font-bold text-gray-800 text-sm truncate">${name}</p>
+                        <p class="text-xs text-gray-400">${tasks.length} tareas · ${done} completadas${od > 0 ? ` · <span class="text-red-500">${od} vencidas</span>` : ''}</p>
+                    </div>
+                    <span class="text-sm font-black text-indigo-500">${pct}%</span>
+                </div>`;
+            }).join('');
+        }
+    }
+
+    // ══ CALENDARIO ══
+    let _calYear  = new Date().getFullYear();
+    let _calMonth = new Date().getMonth();  // 0–11
+    let _calSelected = null; // { year, month, day }
+
+    const _calMonths = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                        'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    function renderCalendar() {
+        const today = new Date(); today.setHours(0,0,0,0);
+
+        document.getElementById('calTitle').textContent = `${_calMonths[_calMonth]} ${_calYear}`;
+
+        // Agrupar tareas por fecha YYYY-MM-DD
+        const byDate = {};
+        (window._allTasks || []).forEach(t => {
+            if (!t.dueDate) return;
+            if (!byDate[t.dueDate]) byDate[t.dueDate] = [];
+            byDate[t.dueDate].push(t);
+        });
+
+        const firstDow   = new Date(_calYear, _calMonth, 1).getDay();  // día semana del 1ro
+        const daysInMon  = new Date(_calYear, _calMonth + 1, 0).getDate();
+        const daysInPrev = new Date(_calYear, _calMonth,     0).getDate();
+
+        const cells = [];
+        // Días del mes anterior
+        for (let i = firstDow - 1; i >= 0; i--) {
+            let m = _calMonth - 1, y = _calYear;
+            if (m < 0) { m = 11; y--; }
+            cells.push({ d: daysInPrev - i, m, y, cur: false });
+        }
+        // Días del mes actual
+        for (let d = 1; d <= daysInMon; d++) cells.push({ d, m: _calMonth, y: _calYear, cur: true });
+        // Días del mes siguiente
+        let nd = 1, nm = _calMonth + 1, ny = _calYear;
+        if (nm > 11) { nm = 0; ny++; }
+        while (cells.length < 42) cells.push({ d: nd++, m: nm, y: ny, cur: false });
+
+        const chipCls = { PENDING:'chip-pending', IN_PROGRESS:'chip-progress', COMPLETED:'chip-completed' };
+
+        document.getElementById('calGrid').innerHTML = cells.map(({ d, m, y, cur }) => {
+            const key  = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const cell = new Date(y, m, d);
+            const isToday    = cell.getTime() === today.getTime();
+            const isSel      = _calSelected && _calSelected.y===y && _calSelected.m===m && _calSelected.d===d;
+            const tasks      = byDate[key] || [];
+            const maxShow    = 3;
+            const extra      = tasks.length - maxShow;
+
+            const chips = tasks.slice(0, maxShow).map(t =>
+                `<span class="cal-task-chip ${chipCls[t.status]||'chip-pending'}">${t.title}</span>`
+            ).join('');
+            const moreHtml = extra > 0
+                ? `<span class="cal-task-chip" style="background:#f3f4f6;color:#6b7280">+${extra} más</span>`
+                : '';
+
+            return `
+            <div class="cal-cell ${isToday?'today':''} ${isSel?'selected':''} ${!cur?'opacity-30':''}"
+                 onclick="${cur ? `calSelectDay(${y},${m},${d})` : ''}">
+                <div class="cal-day-num text-sm font-black mb-1 ${isToday?'':'text-gray-700'}"
+                     style="${isToday?'width:26px;height:26px;display:flex;align-items:center;justify-content:center;':''}">
+                    ${d}
+                </div>
+                ${chips}${moreHtml}
+            </div>`;
+        }).join('');
+
+        // Si hay un día seleccionado, refresca el panel
+        if (_calSelected) renderCalDayDetail(_calSelected.y, _calSelected.m, _calSelected.d);
+    }
+
+    function calPrev() {
+        _calMonth--;
+        if (_calMonth < 0) { _calMonth = 11; _calYear--; }
+        renderCalendar();
+    }
+
+    function calNext() {
+        _calMonth++;
+        if (_calMonth > 11) { _calMonth = 0; _calYear++; }
+        renderCalendar();
+    }
+
+    function calSelectDay(y, m, d) {
+        _calSelected = { y, m, d };
+        renderCalendar();
+        renderCalDayDetail(y, m, d);
+    }
+
+    function _calDateKey(y, m, d) {
+        return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+
+    function openModalForCalDay(y, m, d) {
+        const dateStr = _calDateKey(y, m, d);
+        openModal();
+        setTimeout(() => {
+            const dueEl = document.getElementById('taskDueDate');
+            if (dueEl) dueEl.value = dateStr;
+        }, 20);
+    }
+    window.openModalForCalDay = openModalForCalDay;
+
+    function _calAddTaskBtn(y, m, d, primary) {
+        const cls = primary
+            ? 'font-bold px-5 py-2.5 rounded-xl text-white text-sm w-full'
+            : 'w-full mt-4 font-bold px-4 py-2.5 rounded-xl border-2 border-indigo-200 text-indigo-600 text-sm hover:bg-indigo-50 transition-colors';
+        const style = primary ? ' style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"' : '';
+        const label = primary ? '+ Crear tarea' : '+ Agregar tarea';
+        return `<button type="button" onclick="openModalForCalDay(${y},${m},${d})"
+                    class="${cls}"${style}>${label}</button>`;
+    }
+
+    function renderCalDayDetail(y, m, d) {
+        const key   = _calDateKey(y, m, d);
+        const tasks = (window._allTasks || []).filter(t => t.dueDate === key);
+
+        document.getElementById('calDayTitle').textContent =
+            `${d} de ${_calMonths[m]} ${y}`;
+        document.getElementById('calDayCount').textContent =
+            tasks.length === 0 ? 'Sin tareas' : `${tasks.length} tarea${tasks.length!==1?'s':''}`;
+
+        const el = document.getElementById('calDayList');
+        if (tasks.length === 0) {
+            el.innerHTML = `
+                <div class="text-center py-6">
+                    <p class="text-gray-400 text-sm mb-4">No hay tareas para este día</p>
+                    ${_calAddTaskBtn(y, m, d, true)}
+                </div>`;
+            return;
+        }
+
+        const pMap   = { HIGH:'bg-red-100 text-red-700', MEDIUM:'bg-amber-100 text-amber-700', LOW:'bg-green-100 text-green-700' };
+        const pLabel = { HIGH:'Alta', MEDIUM:'Media', LOW:'Baja' };
+
+        el.innerHTML = tasks.map(t => {
+            const s = getTaskStatusDisplay(t);
+            return `
+            <div class="py-3 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-lg px-2 -mx-2 transition-colors"
+                 onclick="openTaskDetailModal(${t.id})" role="button" tabindex="0">
+                <div class="flex items-start justify-between gap-2 mb-1.5">
+                    <p class="font-bold text-gray-800 text-sm leading-snug flex-1">${t.title}</p>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${pMap[t.priority]||pMap.MEDIUM}">
+                        ${pLabel[t.priority]||'Media'}
+                    </span>
+                </div>
+                ${t.description ? `<p class="text-xs text-gray-400 mb-1.5 line-clamp-2">${t.description}</p>` : ''}
+                ${t.category ? `<p class="text-xs text-gray-400 mb-1">📁 ${t.category}</p>` : ''}
+                <span class="text-xs font-semibold ${s.cls}">${s.icon} ${s.label}</span>
+            </div>`;
+        }).join('') + _calAddTaskBtn(y, m, d, false);
+    }
+
+    // ── Init ──
+    document.addEventListener('DOMContentLoaded', () => {
+        const verEl = document.getElementById('appVersion');
+        if (verEl) verEl.textContent = GESTIX_VERSION;
+        initThemeUI();
+        initCharts();
+        initReportCharts();
+        applyI18n();
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.lang === getLang());
+        });
+    });
+</script>
+<script src="js/tasks.js?v=15"></script>
+</body>
+</html>

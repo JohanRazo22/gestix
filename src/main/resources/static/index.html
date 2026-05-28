@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestix — Gestor de Tareas Profesional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+
+        /* ── Gradient text ── */
+        .gradient-text {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* ── Fondo animado del hero ── */
+        .hero-bg {
+            background: radial-gradient(ellipse 90% 70% at 50% -5%, rgba(99,102,241,.18) 0%, transparent 65%),
+                        radial-gradient(ellipse 55% 40% at 85% 90%, rgba(139,92,246,.12) 0%, transparent 55%),
+                        radial-gradient(ellipse 45% 35% at 10% 80%, rgba(236,72,153,.08) 0%, transparent 55%),
+                        #fff;
+        }
+
+        /* ── Orbes flotantes de fondo ── */
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: .5;
+            pointer-events: none;
+        }
+        .orb-1 { width: 500px; height: 500px; background: radial-gradient(circle, #6366f1 0%, transparent 70%); top: -120px; left: -100px; animation: drift1 12s ease-in-out infinite; }
+        .orb-2 { width: 400px; height: 400px; background: radial-gradient(circle, #ec4899 0%, transparent 70%); top: 50px; right: -80px; animation: drift2 14s ease-in-out infinite; }
+        .orb-3 { width: 350px; height: 350px; background: radial-gradient(circle, #8b5cf6 0%, transparent 70%); bottom: -80px; left: 35%; animation: drift3 10s ease-in-out infinite; }
+
+        @keyframes drift1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(40px,-30px) scale(1.05)} 66%{transform:translate(-20px,40px) scale(.95)} }
+        @keyframes drift2 { 0%,100%{transform:translate(0,0) scale(1)} 40%{transform:translate(-50px,30px) scale(1.08)} 70%{transform:translate(30px,-20px) scale(.92)} }
+        @keyframes drift3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-30px,-40px) scale(1.1)} }
+
+        /* ── Float del mockup ── */
+        .float-anim { animation: float 5s ease-in-out infinite; }
+        @keyframes float { 0%,100%{transform:translateY(0) rotate(-1deg)} 50%{transform:translateY(-18px) rotate(0.5deg)} }
+
+        /* ── Pulse del badge ── */
+        .badge-dot { display:inline-block; width:8px; height:8px; background:#6366f1; border-radius:50%; margin-right:8px; animation: bdot 2s ease-in-out infinite; }
+        @keyframes bdot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.5)} }
+
+        /* ── Fade-in al hacer scroll ── */
+        .reveal { opacity:0; transform:translateY(40px); transition: opacity .7s ease, transform .7s ease; }
+        .reveal.visible { opacity:1; transform:translateY(0); }
+
+        /* ── Stagger para cards ── */
+        .reveal-stagger { opacity:0; transform:translateY(50px) scale(.97); transition: opacity .6s ease, transform .6s ease; }
+        .reveal-stagger.visible { opacity:1; transform:translateY(0) scale(1); }
+
+        /* ── Card hover ── */
+        .feature-card {
+            transition: transform .35s cubic-bezier(.34,1.56,.64,1), box-shadow .35s ease;
+            cursor: default;
+        }
+        .feature-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 30px 60px rgba(99,102,241,.18);
+        }
+
+        /* ── Botón glow ── */
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            box-shadow: 0 8px 30px rgba(99,102,241,.45);
+            transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-3px) scale(1.03);
+            box-shadow: 0 16px 45px rgba(99,102,241,.60);
+        }
+
+        /* ── Mockup shadow ── */
+        .mockup-shadow { box-shadow: 0 40px 100px rgba(0,0,0,.16), 0 8px 30px rgba(99,102,241,.14); }
+
+        /* ── Step card ── */
+        .step-card { transition: transform .3s ease, box-shadow .3s ease; }
+        .step-card:hover { transform: translateY(-8px); }
+
+        /* ── Navbar glassmorphism ── */
+        .nav-glass {
+            background: rgba(255,255,255,.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+
+        /* ── Contador animado ── */
+        .count-up { display:inline-block; }
+
+        /* ── Shimmer en el mockup ── */
+        .shimmer-bar {
+            background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+        /* ── Partículas decorativas ── */
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0;
+            animation: particle-fly 8s ease-in-out infinite;
+        }
+        @keyframes particle-fly {
+            0% { opacity:0; transform: translateY(0) scale(0); }
+            20% { opacity:.6; }
+            80% { opacity:.3; }
+            100% { opacity:0; transform: translateY(-120px) scale(1.5); }
+        }
+
+        /* ── Línea decorativa que crece ── */
+        .grow-line { width:0; height:2px; background: linear-gradient(90deg,#6366f1,#ec4899); transition:width 1.2s ease; }
+        .grow-line.visible { width:80px; }
+
+        /* ── Gradient border en stats ── */
+        .stat-card {
+            position:relative;
+            background:#fff;
+            border-radius:24px;
+            transition: transform .3s ease;
+        }
+        .stat-card::before {
+            content:'';
+            position:absolute;
+            inset:-2px;
+            border-radius:26px;
+            background: linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899);
+            opacity:0;
+            transition:opacity .3s ease;
+            z-index:-1;
+        }
+        .stat-card:hover::before { opacity:1; }
+        .stat-card:hover { transform:translateY(-5px); }
+
+        /* ── About value cards ── */
+        .about-value-card {
+            transition: transform .35s cubic-bezier(.34,1.56,.64,1), box-shadow .35s ease;
+        }
+        .about-value-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 24px 50px rgba(99,102,241,.12);
+        }
+
+        /* ── Typing cursor ── */
+        .cursor-blink::after { content:'|'; animation:blink .8s infinite; color:#6366f1; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    </style>
+</head>
+<body class="hero-bg text-gray-900 overflow-x-hidden">
+
+<!-- ══════════════════════════════ NAVBAR ══════════════════════════════ -->
+<nav class="nav-glass grid grid-cols-3 items-center px-16 py-5 sticky top-0 border-b border-white/60 z-50 transition-all duration-300" id="navbar">
+    <a href="#" class="flex items-center gap-3 justify-self-start" onclick="window.scrollTo({top:0,behavior:'smooth'}); return false;">
+        <div class="w-11 h-11 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+            <span class="text-white font-black text-xl">G</span>
+        </div>
+        <span class="text-2xl font-black tracking-tight gradient-text">Gestix</span>
+    </a>
+    <div class="hidden md:flex items-center justify-center gap-8 justify-self-center">
+        <a href="#features" class="text-gray-500 font-medium text-base hover:text-indigo-600 transition-colors whitespace-nowrap">Funciones</a>
+        <a href="#how"      class="text-gray-500 font-medium text-base hover:text-indigo-600 transition-colors whitespace-nowrap">¿Cómo funciona?</a>
+        <a href="#about"    class="text-gray-500 font-medium text-base hover:text-indigo-600 transition-colors whitespace-nowrap">Acerca de</a>
+    </div>
+    <div class="flex items-center gap-3 justify-self-end">
+        <a href="login.html" class="text-gray-600 font-semibold text-base hover:text-indigo-600 transition-colors px-4 py-2 whitespace-nowrap">
+            Iniciar sesión
+        </a>
+        <a href="login.html#register" class="btn-primary text-white font-bold px-7 py-3 rounded-xl text-base whitespace-nowrap">
+            Empezar gratis →
+        </a>
+    </div>
+</nav>
+
+<!-- ══════════════════════════════ HERO ══════════════════════════════ -->
+<section class="relative pt-24 pb-16 px-8 text-center overflow-hidden">
+
+    <!-- Orbes de fondo -->
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <!-- Badge animado -->
+    <div class="reveal inline-flex items-center bg-white/80 border border-indigo-200 shadow-sm text-indigo-700 font-semibold px-5 py-2.5 rounded-full text-sm mb-10">
+        <span class="badge-dot"></span>
+        Productividad sin esfuerzo
+    </div>
+
+    <!-- Headline con typing -->
+    <h1 class="reveal text-7xl md:text-8xl font-black leading-none tracking-tight max-w-5xl mx-auto mb-8" style="transition-delay:.1s">
+        Organiza todo.<br>
+        <span class="gradient-text" id="typed-text"></span>
+    </h1>
+
+    <!-- Subheadline -->
+    <p class="reveal text-2xl md:text-3xl text-gray-400 font-normal max-w-3xl mx-auto mb-14 leading-relaxed" style="transition-delay:.2s">
+        La forma más simple de gestionar tus tareas con
+        <span class="text-gray-700 font-semibold">prioridades</span>,
+        <span class="text-gray-700 font-semibold">fechas límite</span> y
+        <span class="text-gray-700 font-semibold">categorías</span>.
+    </p>
+
+    <!-- CTAs -->
+    <div class="reveal flex flex-col sm:flex-row items-center justify-center gap-5 mb-24" style="transition-delay:.3s">
+        <a href="login.html#register" class="btn-primary text-white font-black px-14 py-5 rounded-2xl text-xl">
+            Crear cuenta gratis →
+        </a>
+        <a href="login.html" class="bg-white border-2 border-gray-200 text-gray-700 font-semibold px-14 py-5 rounded-2xl text-xl hover:border-indigo-400 hover:text-indigo-600 transition-all">
+            Ya tengo cuenta
+        </a>
+    </div>
+
+    <!-- Mockup UI -->
+    <div class="reveal max-w-4xl mx-auto float-anim" style="transition-delay:.4s">
+        <div class="bg-white rounded-3xl mockup-shadow overflow-hidden border border-gray-100/80">
+            <!-- Barra del browser -->
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                <div class="w-3.5 h-3.5 rounded-full bg-red-400 shadow-sm"></div>
+                <div class="w-3.5 h-3.5 rounded-full bg-yellow-400 shadow-sm"></div>
+                <div class="w-3.5 h-3.5 rounded-full bg-green-400 shadow-sm"></div>
+                <div class="flex-1 bg-white rounded-full h-6 mx-6 flex items-center px-4 border border-gray-200">
+                    <span class="text-gray-400 text-xs">🔒 localhost:8080/dashboard.html</span>
+                </div>
+            </div>
+            <!-- Contenido -->
+            <div class="p-8 bg-gray-50/30">
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h2 class="text-2xl font-black text-gray-800">Mis Tareas</h2>
+                        <p class="text-gray-400 text-sm mt-0.5">Bienvenido de vuelta 👋</p>
+                    </div>
+                    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-6 py-3 rounded-xl text-sm font-bold shadow-lg shadow-indigo-200">
+                        + Nueva Tarea
+                    </div>
+                </div>
+                <!-- Filtros -->
+                <div class="flex gap-3 mb-6">
+                    <div class="bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-full">Todas</div>
+                    <div class="bg-white text-gray-500 text-xs font-semibold px-4 py-2 rounded-full border border-gray-200">Pendientes</div>
+                    <div class="bg-white text-gray-500 text-xs font-semibold px-4 py-2 rounded-full border border-gray-200">Alta prioridad</div>
+                </div>
+                <!-- Tarjetas de tareas -->
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-white rounded-2xl p-5 border-l-4 border-red-500 shadow-sm hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="bg-red-100 text-red-600 text-xs font-bold px-2.5 py-1 rounded-full">🔴 Alta</span>
+                            <span class="bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">En progreso</span>
+                        </div>
+                        <p class="font-bold text-gray-800 text-sm">Diseñar la propuesta</p>
+                        <p class="text-gray-400 text-xs mt-2">📅 Vence hoy</p>
+                    </div>
+                    <div class="bg-white rounded-2xl p-5 border-l-4 border-yellow-400 shadow-sm hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="bg-yellow-100 text-yellow-600 text-xs font-bold px-2.5 py-1 rounded-full">🟡 Media</span>
+                            <span class="bg-gray-100 text-gray-600 text-xs font-semibold px-2.5 py-1 rounded-full">Pendiente</span>
+                        </div>
+                        <p class="font-bold text-gray-800 text-sm">Revisar el informe</p>
+                        <p class="text-gray-400 text-xs mt-2">📅 Vence mañana</p>
+                    </div>
+                    <div class="bg-white rounded-2xl p-5 border-l-4 border-green-500 shadow-sm hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="bg-green-100 text-green-600 text-xs font-bold px-2.5 py-1 rounded-full">🟢 Baja</span>
+                            <span class="bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-1 rounded-full">✓ Completada</span>
+                        </div>
+                        <p class="font-bold text-gray-800 text-sm">Actualizar documentos</p>
+                        <p class="text-gray-400 text-xs mt-2">📅 Hace 2 días</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ══════════════════════════════ STATS ══════════════════════════════ -->
+<section class="py-20 px-8">
+    <div class="max-w-5xl mx-auto grid grid-cols-3 gap-8">
+        <div class="stat-card reveal p-10 text-center" style="transition-delay:.0s">
+            <p class="text-6xl font-black gradient-text mb-3 count-up" data-target="100" data-suffix="%">0%</p>
+            <p class="text-gray-500 text-xl font-medium">Gratis para siempre</p>
+        </div>
+        <div class="stat-card reveal p-10 text-center" style="transition-delay:.15s">
+            <p class="text-6xl font-black gradient-text mb-3">∞</p>
+            <p class="text-gray-500 text-xl font-medium">Tareas sin límite</p>
+        </div>
+        <div class="stat-card reveal p-10 text-center" style="transition-delay:.3s">
+            <p class="text-6xl font-black gradient-text mb-3 count-up" data-target="256" data-suffix="-bit">0</p>
+            <p class="text-gray-500 text-xl font-medium">Cifrado seguro JWT</p>
+        </div>
+    </div>
+</section>
+
+<!-- ══════════════════════════════ FEATURES ══════════════════════════════ -->
+<section id="features" class="py-28 px-8">
+    <div class="max-w-7xl mx-auto">
+        <div class="text-center mb-6">
+            <span class="text-indigo-500 font-bold uppercase tracking-widest text-sm">Funciones</span>
+        </div>
+        <h2 class="reveal text-6xl font-black text-gray-900 text-center mb-5">Todo lo que necesitas</h2>
+        <div class="flex justify-center mb-5">
+            <div class="grow-line" id="features-line"></div>
+        </div>
+        <p class="reveal text-2xl text-gray-400 text-center max-w-2xl mx-auto mb-20" style="transition-delay:.1s">
+            Herramientas pensadas para que nunca pierdas el hilo
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+
+            <div class="feature-card reveal-stagger bg-white border border-gray-100 rounded-3xl p-10" style="transition-delay:.0s">
+                <div class="w-16 h-16 bg-gradient-to-br from-indigo-100 to-indigo-200 rounded-2xl flex items-center justify-center text-3xl mb-7 shadow-sm">📋</div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">Organiza tareas</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Crea tareas con título y descripción detallada. Clasifícalas en Pendiente, En Progreso o Completada.</p>
+            </div>
+
+            <div class="feature-card reveal-stagger bg-white border border-gray-100 rounded-3xl p-10" style="transition-delay:.1s">
+                <div class="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center text-3xl mb-7 shadow-sm">🎯</div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">Prioridades claras</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Alta, Media o Baja. Con colores visuales siempre sabrás exactamente en qué enfocarte primero.</p>
+            </div>
+
+            <div class="feature-card reveal-stagger bg-white border border-gray-100 rounded-3xl p-10" style="transition-delay:.2s">
+                <div class="w-16 h-16 bg-gradient-to-br from-pink-100 to-pink-200 rounded-2xl flex items-center justify-center text-3xl mb-7 shadow-sm">📅</div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">Fechas límite</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Asigna fechas de vencimiento para nunca olvidar un plazo importante. Todo bajo control.</p>
+            </div>
+
+            <div class="feature-card reveal-stagger bg-white border border-gray-100 rounded-3xl p-10" style="transition-delay:.3s">
+                <div class="w-16 h-16 bg-gradient-to-br from-green-100 to-green-200 rounded-2xl flex items-center justify-center text-3xl mb-7 shadow-sm">🏷️</div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">Categorías</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Agrupa tus tareas por categoría: Trabajo, Personal, Estudio o la etiqueta que necesites.</p>
+            </div>
+
+            <div class="feature-card reveal-stagger bg-white border border-gray-100 rounded-3xl p-10" style="transition-delay:.4s">
+                <div class="w-16 h-16 bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-2xl flex items-center justify-center text-3xl mb-7 shadow-sm">🔍</div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">Filtros rápidos</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Filtra por estado o prioridad con un solo clic. Encuentra cualquier tarea al instante.</p>
+            </div>
+
+            <div class="feature-card reveal-stagger bg-white border border-gray-100 rounded-3xl p-10" style="transition-delay:.5s">
+                <div class="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl flex items-center justify-center text-3xl mb-7 shadow-sm">🔒</div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">100% Seguro</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Autenticación JWT y contraseñas cifradas con BCrypt. Tus datos son solo tuyos, siempre.</p>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- ══════════════════════════════ HOW IT WORKS ══════════════════════════════ -->
+<section id="how" class="py-28 px-8 bg-gradient-to-b from-white via-indigo-50/30 to-white relative overflow-hidden">
+
+    <!-- Partículas decorativas -->
+    <div class="particle w-4 h-4 bg-indigo-400" style="left:10%;top:30%;animation-delay:0s;animation-duration:7s"></div>
+    <div class="particle w-3 h-3 bg-purple-400" style="left:25%;top:60%;animation-delay:2s;animation-duration:9s"></div>
+    <div class="particle w-5 h-5 bg-pink-400" style="left:70%;top:20%;animation-delay:1s;animation-duration:8s"></div>
+    <div class="particle w-3 h-3 bg-indigo-300" style="left:85%;top:70%;animation-delay:3s;animation-duration:6s"></div>
+    <div class="particle w-4 h-4 bg-purple-300" style="left:50%;top:80%;animation-delay:4s;animation-duration:10s"></div>
+
+    <div class="max-w-5xl mx-auto relative z-10">
+        <div class="text-center mb-6">
+            <span class="text-indigo-500 font-bold uppercase tracking-widest text-sm">¿Cómo funciona?</span>
+        </div>
+        <h2 class="reveal text-6xl font-black text-gray-900 text-center mb-5">En 3 pasos</h2>
+        <div class="flex justify-center mb-5">
+            <div class="grow-line" id="how-line"></div>
+        </div>
+        <p class="reveal text-2xl text-gray-400 text-center mb-20" style="transition-delay:.1s">
+            Empieza a organizar tu vida en menos de un minuto
+        </p>
+
+        <div class="grid grid-cols-3 gap-10">
+
+            <div class="step-card reveal text-center" style="transition-delay:.0s">
+                <div class="w-36 h-36 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-indigo-300 relative">
+                    <span class="text-white text-6xl font-black">1</span>
+                    <div class="absolute -top-2 -right-2 w-8 h-8 bg-white rounded-full border-2 border-indigo-200 flex items-center justify-center text-lg">✨</div>
+                </div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">Crea tu cuenta</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Regístrate gratis con tu email. Sin tarjeta de crédito, en segundos.</p>
+            </div>
+
+            <div class="step-card reveal text-center" style="transition-delay:.15s">
+                <div class="w-36 h-36 bg-gradient-to-br from-purple-500 to-purple-700 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-purple-300 relative">
+                    <span class="text-white text-6xl font-black">2</span>
+                    <div class="absolute -top-2 -right-2 w-8 h-8 bg-white rounded-full border-2 border-purple-200 flex items-center justify-center text-lg">📝</div>
+                </div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">Añade tus tareas</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Crea tareas con prioridad, categoría y fecha límite en pocos clics.</p>
+            </div>
+
+            <div class="step-card reveal text-center" style="transition-delay:.3s">
+                <div class="w-36 h-36 bg-gradient-to-br from-pink-500 to-pink-700 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-pink-300 relative">
+                    <span class="text-white text-6xl font-black">3</span>
+                    <div class="absolute -top-2 -right-2 w-8 h-8 bg-white rounded-full border-2 border-pink-200 flex items-center justify-center text-lg">🚀</div>
+                </div>
+                <h3 class="text-2xl font-black text-gray-900 mb-4">¡Logra tus metas!</h3>
+                <p class="text-gray-500 text-lg leading-relaxed">Filtra, actualiza y completa tareas. Visualiza tu progreso en tiempo real.</p>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- ══════════════════════════════ ACERCA DE NOSOTROS ══════════════════════════════ -->
+<section id="about" class="py-28 px-8 bg-white relative overflow-hidden">
+    <div class="absolute top-0 right-0 w-96 h-96 bg-indigo-100/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
+    <div class="absolute bottom-0 left-0 w-80 h-80 bg-pink-100/30 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4 pointer-events-none"></div>
+
+    <div class="max-w-6xl mx-auto relative z-10">
+        <div class="text-center mb-6">
+            <span class="text-indigo-500 font-bold uppercase tracking-widest text-sm">Acerca de nosotros</span>
+        </div>
+        <h2 class="reveal text-6xl font-black text-gray-900 text-center mb-5">Hecho para simplificar tu día</h2>
+        <div class="flex justify-center mb-5">
+            <div class="grow-line" id="about-line"></div>
+        </div>
+        <p class="reveal text-2xl text-gray-400 text-center max-w-3xl mx-auto mb-16 leading-relaxed" style="transition-delay:.1s">
+            Gestix nació con una idea clara: que organizar tus tareas no debería ser complicado ni costoso.
+            Queremos que cualquier persona — estudiante, freelancer o equipo pequeño — tenga una herramienta
+            clara, bonita y segura para cumplir sus objetivos.
+        </p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-20">
+            <div class="reveal" style="transition-delay:.15s">
+                <div class="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-3xl p-10">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-indigo-200">💡</div>
+                        <h3 class="text-2xl font-black text-gray-900">Nuestra historia</h3>
+                    </div>
+                    <p class="text-gray-600 text-lg leading-relaxed mb-4">
+                        Empezamos cansados de apps sobrecargadas, llenas de funciones que nadie usa y planes de pago
+                        confusos. Así surgió Gestix: un gestor de tareas directo al grano, con lo esencial bien hecho.
+                    </p>
+                    <p class="text-gray-600 text-lg leading-relaxed">
+                        Hoy seguimos mejorándolo con calendario, proyectos, reportes e integraciones con Google y Microsoft,
+                        siempre escuchando a quienes lo usan cada día.
+                    </p>
+                </div>
+            </div>
+            <div class="reveal grid grid-cols-2 gap-4" style="transition-delay:.25s">
+                <div class="about-value-card bg-white border border-gray-100 rounded-2xl p-6 text-center">
+                    <p class="text-4xl mb-3">🎯</p>
+                    <p class="font-black text-gray-900 text-lg mb-1">Misión</p>
+                    <p class="text-gray-500 text-sm leading-relaxed">Ayudarte a priorizar lo importante y terminar lo que empiezas.</p>
+                </div>
+                <div class="about-value-card bg-white border border-gray-100 rounded-2xl p-6 text-center">
+                    <p class="text-4xl mb-3">🌍</p>
+                    <p class="font-black text-gray-900 text-lg mb-1">Visión</p>
+                    <p class="text-gray-500 text-sm leading-relaxed">Ser la herramienta de productividad accesible para todos.</p>
+                </div>
+                <div class="about-value-card bg-white border border-gray-100 rounded-2xl p-6 text-center">
+                    <p class="text-4xl mb-3">🔒</p>
+                    <p class="font-black text-gray-900 text-lg mb-1">Privacidad</p>
+                    <p class="text-gray-500 text-sm leading-relaxed">Tus datos son tuyos. Autenticación segura y sin venta de información.</p>
+                </div>
+                <div class="about-value-card bg-white border border-gray-100 rounded-2xl p-6 text-center">
+                    <p class="text-4xl mb-3">✨</p>
+                    <p class="font-black text-gray-900 text-lg mb-1">Simplicidad</p>
+                    <p class="text-gray-500 text-sm leading-relaxed">Interfaz limpia, sin curva de aprendizaje innecesaria.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="reveal bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-3xl p-10 md:p-12 text-center text-white shadow-2xl shadow-indigo-200" style="transition-delay:.3s">
+            <p class="text-indigo-100 font-semibold uppercase tracking-widest text-sm mb-4">Lo que nos mueve</p>
+            <blockquote class="text-2xl md:text-3xl font-bold leading-snug max-w-3xl mx-auto mb-6">
+                “Creemos que la productividad no va de hacer más cosas, sino de hacer las correctas con claridad y calma.”
+            </blockquote>
+            <p class="text-indigo-200 text-lg">— El equipo Gestix</p>
+        </div>
+    </div>
+</section>
+
+<!-- ══════════════════════════════ CTA FINAL ══════════════════════════════ -->
+<section class="py-36 px-8 text-center relative overflow-hidden">
+    <!-- Fondo degradado animado -->
+    <div class="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 animate-gradient"></div>
+    <style>
+        .animate-gradient { background-size:300% 300%; animation:gradientShift 8s ease infinite; }
+        @keyframes gradientShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+    </style>
+    <!-- Círculos decorativos -->
+    <div class="absolute top-0 left-0 w-80 h-80 bg-white/5 rounded-full -translate-x-40 -translate-y-40"></div>
+    <div class="absolute bottom-0 right-0 w-[32rem] h-[32rem] bg-white/5 rounded-full translate-x-56 translate-y-56"></div>
+    <div class="absolute top-1/2 left-1/4 w-40 h-40 bg-white/5 rounded-full"></div>
+
+    <div class="relative z-10 max-w-4xl mx-auto">
+        <div class="reveal inline-flex items-center bg-white/20 border border-white/30 text-white font-semibold px-5 py-2.5 rounded-full text-sm mb-10">
+            <span class="badge-dot" style="background:white"></span>
+            Sin tarjeta de crédito · Sin límites
+        </div>
+        <h2 class="reveal text-7xl md:text-8xl font-black text-white mb-8 leading-tight" style="transition-delay:.1s">
+            Empieza hoy.<br>Es gratis.
+        </h2>
+        <p class="reveal text-2xl text-indigo-200 mb-14 font-light" style="transition-delay:.2s">
+            Únete y empieza a ser más productivo ahora mismo
+        </p>
+        <div class="reveal" style="transition-delay:.3s">
+            <a href="login.html#register"
+                class="bg-white text-indigo-600 font-black px-16 py-6 rounded-2xl text-2xl hover:bg-indigo-50 transition-all shadow-2xl inline-block hover:-translate-y-1">
+                Crear mi cuenta gratis →
+            </a>
+        </div>
+        <p class="reveal text-indigo-300 text-lg mt-10" style="transition-delay:.4s">
+            ¿Ya tienes cuenta?
+            <a href="login.html" class="text-white underline hover:no-underline font-semibold">Inicia sesión aquí</a>
+        </p>
+    </div>
+</section>
+
+<!-- ══════════════════════════════ FOOTER ══════════════════════════════ -->
+<footer class="py-12 px-16 border-t border-gray-100 flex items-center justify-between bg-white">
+    <div class="flex items-center gap-3">
+        <div class="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-200">
+            <span class="text-white font-black text-sm">G</span>
+        </div>
+        <span class="font-black text-xl gradient-text">Gestix</span>
+    </div>
+    <p class="text-gray-400 text-base">Gestor de tareas profesional — Hecho con ♥</p>
+    <div class="flex gap-6">
+        <a href="#about"             class="text-gray-400 hover:text-indigo-600 text-base font-medium transition-colors">Acerca de</a>
+        <a href="login.html"          class="text-gray-400 hover:text-indigo-600 text-base font-medium transition-colors">Iniciar sesión</a>
+        <a href="login.html#register" class="text-gray-400 hover:text-indigo-600 text-base font-medium transition-colors">Registrarse</a>
+    </div>
+</footer>
+
+<!-- ══════════════════════════════ SCRIPTS ══════════════════════════════ -->
+<script>
+    // ── Redirigir si ya hay token ──
+    if (localStorage.getItem('token')) window.location.href = 'dashboard.html';
+
+    // ── Scroll suave ──
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            const t = document.querySelector(a.getAttribute('href'));
+            if (t) t.scrollIntoView({ behavior: 'smooth' });
+        });
+    });
+
+    // ── Efecto typing ──
+    const words = ['Logra más.', 'Sé productivo.', 'Sin estrés.'];
+    let wIndex = 0, cIndex = 0, deleting = false;
+    const el = document.getElementById('typed-text');
+    el.classList.add('cursor-blink');
+
+    function typeLoop() {
+        const word = words[wIndex];
+        if (!deleting) {
+            el.textContent = word.slice(0, ++cIndex);
+            if (cIndex === word.length) { deleting = true; setTimeout(typeLoop, 2200); return; }
+        } else {
+            el.textContent = word.slice(0, --cIndex);
+            if (cIndex === 0) { deleting = false; wIndex = (wIndex + 1) % words.length; }
+        }
+        setTimeout(typeLoop, deleting ? 60 : 90);
+    }
+    setTimeout(typeLoop, 800);
+
+    // ── Reveal al hacer scroll ──
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                // Líneas decorativas
+                if (entry.target.id === 'features-line' || entry.target.id === 'how-line' || entry.target.id === 'about-line') {
+                    entry.target.classList.add('visible');
+                }
+            }
+        });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => observer.observe(el));
+    document.querySelectorAll('.grow-line').forEach(el => observer.observe(el));
+
+    // ── Activar líneas decorativas ──
+    const lineObserver = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.5 });
+    document.querySelectorAll('.grow-line').forEach(el => lineObserver.observe(el));
+
+    // ── Contador animado ──
+    const countObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const el = entry.target;
+                const target = parseInt(el.dataset.target);
+                const suffix = el.dataset.suffix || '';
+                let current = 0;
+                const step = target / 60;
+                const timer = setInterval(() => {
+                    current = Math.min(current + step, target);
+                    el.textContent = Math.round(current) + suffix;
+                    if (current >= target) clearInterval(timer);
+                }, 25);
+                countObserver.unobserve(el);
+            }
+        });
+    }, { threshold: 0.5 });
+    document.querySelectorAll('.count-up').forEach(el => countObserver.observe(el));
+
+    // ── Navbar compacta al bajar ──
+    window.addEventListener('scroll', () => {
+        const nav = document.getElementById('navbar');
+        if (window.scrollY > 60) {
+            nav.classList.add('py-3');
+            nav.classList.remove('py-5');
+        } else {
+            nav.classList.add('py-5');
+            nav.classList.remove('py-3');
+        }
+    });
+
+    // ── Activar reveals del hero inmediatamente ──
+    document.querySelectorAll('.reveal').forEach((el, i) => {
+        setTimeout(() => el.classList.add('visible'), 100 + i * 80);
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+# ──────────────────────────────────────────────
+#  Maven / build
+# ──────────────────────────────────────────────
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ──────────────────────────────────────────────
+#  Logs
+# ──────────────────────────────────────────────
+*.log
+spring.log
+spring.log.err
+logs/
+
+# ──────────────────────────────────────────────
+#  IDE: IntelliJ / Eclipse / VS Code / NetBeans
+# ──────────────────────────────────────────────
+.idea/
+*.iws
+*.iml
+*.ipr
+
+.classpath
+.project
+.settings/
+.springBeans
+.sts4-cache
+
+.vscode/
+*.code-workspace
+
+.apt_generated/
+.apt_generated_test/
+.factorypath
+nbproject/private/
+nbbuild/
+nbdist/
+.nb-gradle/
+
+# ──────────────────────────────────────────────
+#  Cursor / Claude / asistentes de IA
+# ──────────────────────────────────────────────
+.cursor/
+.claude/
+
+# ──────────────────────────────────────────────
+#  Secretos & configuración local
+# ──────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+application-local.yml
+application-local.yaml
+application-local.properties
+application-secrets.yml
+application-secrets.yaml
+
+# ──────────────────────────────────────────────
+#  Sistema operativo
+# ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ──────────────────────────────────────────────
+#  Otros
+# ──────────────────────────────────────────────
+*.bak
+*.tmp
+*.swp
